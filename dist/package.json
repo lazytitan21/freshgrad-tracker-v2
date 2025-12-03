@@ -1,0 +1,16 @@
+{
+  "name": "freshgrad-tracker-azure",
+  "version": "1.0.0",
+  "description": "FreshGrad Tracker - Azure Deployment",
+  "main": "server.cjs",
+  "scripts": {
+    "start": "node server.cjs"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  }
+}
