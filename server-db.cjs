@@ -60,11 +60,19 @@ async function initDatabase() {
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS teaching_experience INTEGER',
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_data JSONB DEFAULT '{}'::jsonb",
         
-        // Courses table migrations
-        "ALTER TABLE courses ADD COLUMN IF NOT EXISTS course_data JSONB DEFAULT '{}'::jsonb",
+        // Courses table migrations - ensure ALL columns exist
+        'ALTER TABLE courses ADD COLUMN IF NOT EXISTS code VARCHAR(50)',
+        'ALTER TABLE courses ADD COLUMN IF NOT EXISTS title VARCHAR(255)',
+        'ALTER TABLE courses ADD COLUMN IF NOT EXISTS brief TEXT',
+        'ALTER TABLE courses ADD COLUMN IF NOT EXISTS weight DECIMAL(4,2) DEFAULT 0.3',
+        'ALTER TABLE courses ADD COLUMN IF NOT EXISTS pass_threshold INTEGER DEFAULT 70',
+        'ALTER TABLE courses ADD COLUMN IF NOT EXISTS is_required BOOLEAN DEFAULT true',
+        "ALTER TABLE courses ADD COLUMN IF NOT EXISTS tracks JSONB DEFAULT '[]'::jsonb",
         'ALTER TABLE courses ADD COLUMN IF NOT EXISTS modality VARCHAR(100)',
         'ALTER TABLE courses ADD COLUMN IF NOT EXISTS hours INTEGER',
         'ALTER TABLE courses ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true',
+        "ALTER TABLE courses ADD COLUMN IF NOT EXISTS course_data JSONB DEFAULT '{}'::jsonb",
+        'ALTER TABLE courses ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
         
         // Candidates table migrations
         "ALTER TABLE candidates ADD COLUMN IF NOT EXISTS candidate_data JSONB DEFAULT '{}'::jsonb",
@@ -83,7 +91,8 @@ async function initDatabase() {
         try {
           await pool.query(migration);
         } catch (e) {
-          // Column might already exist, ignore error
+          // Column might already exist or other non-fatal error, ignore
+          console.log('Migration note:', e.message);
         }
       }
       console.log('✅ Database migrations applied');
@@ -108,12 +117,30 @@ app.get('/health', async (req, res) => {
       dbTime: result.rows[0].now
     });
   } catch (error) {
-    res.status(500).json({ 
+    res.status(500).json({
       status: 'error', 
       timestamp: new Date().toISOString(),
       database: 'disconnected',
       error: error.message
     });
+  }
+});
+
+// Debug endpoint - check table columns
+app.get('/api/debug/schema', async (req, res) => {
+  try {
+    const tables = ['users', 'courses', 'candidates', 'mentors'];
+    const schema = {};
+    for (const table of tables) {
+      const result = await pool.query(
+        `SELECT column_name, data_type FROM information_schema.columns WHERE table_name = $1 ORDER BY ordinal_position`,
+        [table]
+      );
+      schema[table] = result.rows;
+    }
+    res.json(schema);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -549,6 +576,8 @@ app.post('/api/courses', async (req, res) => {
     // Handle hours - convert empty string to null for INTEGER column
     const hoursValue = hours === '' || hours === undefined || hours === null ? null : Number(hours) || null;
     
+    console.log('📝 Creating course:', { courseId, code, title });
+    
     const result = await pool.query(
       `INSERT INTO courses (id, code, title, brief, weight, pass_threshold, is_required, tracks, modality, hours, active, course_data, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
@@ -577,8 +606,8 @@ app.post('/api/courses', async (req, res) => {
     console.log('✅ Course created:', course.id);
     res.status(201).json(response);
   } catch (error) {
-    console.error('Create course error:', error);
-    res.status(500).json({ error: 'Failed to create course' });
+    console.error('Create course error:', error.message, error.stack);
+    res.status(500).json({ error: 'Failed to create course', details: error.message });
   }
 });
 
