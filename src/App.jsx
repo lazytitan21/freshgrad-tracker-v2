@@ -2914,6 +2914,7 @@ function ForgotPassword({ onBack, onSuccess, prefillEmail = "" }){
 function StudentProfile(){
   const { user, updateProfile, logout } = useAuth();
   const { candidates, courses, notify } = useStore();
+  const [saveMessage, setSaveMessage] = useState("");
 
   const [form, setForm] = useState({
     name: user?.name || "",
@@ -3072,7 +3073,16 @@ function StudentProfile(){
             <label>Upload Teaching License<input type="file" className="mt-1 w-full rounded-xl border px-3 py-2" onChange={e=>handleFile("teachingLicense", e.target.files?.[0])} />{form.docs?.teachingLicense?.name && <div className="text-xs text-slate-500 mt-1">Uploaded: {form.docs.teachingLicense.name}</div>}</label>
           </div>
 
-          <div className="mt-4"><button  className={`rounded-xl px-4 py-2 text-white ${valid ? "bg-slate-900" : "bg-slate-400 cursor-not-allowed"}`} disabled={!valid} onClick={() => valid && updateProfile(form)}>Save changes</button></div>
+          <div className="mt-4 flex items-center gap-3">
+            <button className={`rounded-xl px-4 py-2 text-white ${valid ? "bg-slate-900" : "bg-slate-400 cursor-not-allowed"}`} disabled={!valid} onClick={() => { 
+              if (valid) { 
+                updateProfile(form); 
+                setSaveMessage("✓ Changes saved successfully!"); 
+                setTimeout(() => setSaveMessage(""), 3000); 
+              } 
+            }}>Save changes</button>
+            {saveMessage && <span className="text-emerald-600 font-medium text-sm">{saveMessage}</span>}
+          </div>
         </div>
 
         {isAccepted && (
