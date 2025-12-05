@@ -546,6 +546,9 @@ app.post('/api/courses', async (req, res) => {
     const { id, code, title, brief, weight, passThreshold, isRequired, tracks, modality, hours, active, ...otherFields } = req.body;
     const courseId = id || `CR-${Date.now()}`;
     
+    // Handle hours - convert empty string to null for INTEGER column
+    const hoursValue = hours === '' || hours === undefined || hours === null ? null : Number(hours) || null;
+    
     const result = await pool.query(
       `INSERT INTO courses (id, code, title, brief, weight, pass_threshold, is_required, tracks, modality, hours, active, course_data, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
@@ -563,7 +566,7 @@ app.post('/api/courses', async (req, res) => {
          course_data = EXCLUDED.course_data
        RETURNING *`,
       [courseId, code, title, brief, weight || 0.3, passThreshold || 70, isRequired !== false, 
-       JSON.stringify(tracks || []), modality, hours, active !== false, JSON.stringify(otherFields)]
+       JSON.stringify(tracks || []), modality || null, hoursValue, active !== false, JSON.stringify(otherFields)]
     );
     
     const course = result.rows[0];
@@ -584,6 +587,9 @@ app.put('/api/courses/:id', async (req, res) => {
   try {
     const { code, title, brief, weight, passThreshold, isRequired, tracks, modality, hours, active, ...otherFields } = req.body;
     
+    // Handle hours - convert empty string to null for INTEGER column
+    const hoursValue = hours === '' || hours === undefined ? null : (hours === null ? null : Number(hours) || null);
+    
     const result = await pool.query(
       `UPDATE courses 
        SET code = COALESCE($2, code),
@@ -600,7 +606,7 @@ app.put('/api/courses/:id', async (req, res) => {
        WHERE id = $1
        RETURNING *`,
       [req.params.id, code, title, brief, weight, passThreshold, isRequired,
-       tracks ? JSON.stringify(tracks) : null, modality, hours, active, JSON.stringify(otherFields)]
+       tracks ? JSON.stringify(tracks) : null, modality || null, hoursValue, active, JSON.stringify(otherFields)]
     );
     
     if (result.rows.length === 0) {

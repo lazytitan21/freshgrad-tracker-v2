@@ -3166,18 +3166,30 @@ function ApplicantsPage(){
       enrollments: [],
       notesThread: [{ id:`N-${id}`, who:"Admin", text:"Accepted from applicants.", ts:new Date().toISOString() }]
     };
-    await addCandidate(newC);
-    adminUpdateUser(email, { applicantStatus: "Accepted", candidateId: id });
-    notify({ role:"Admin" }, { type:"applicant_accepted", title:"Applicant accepted", body:`${u.name} moved to Candidates`, target:{ page:"candidates", candidateId:id } });
-    alert("Applicant accepted and added to Candidates.");
+    try {
+      await addCandidate(newC);
+      await adminUpdateUser(email, { applicantStatus: "Accepted", candidateId: id, interested: false });
+      notify({ role:"Admin" }, { type:"applicant_accepted", title:"Applicant accepted", body:`${u.name} moved to Candidates`, target:{ page:"candidates", candidateId:id } });
+      alert("Applicant accepted and added to Candidates.");
+      setOpen(null);
+    } catch (error) {
+      console.error('Failed to accept applicant:', error);
+      alert("Failed to accept applicant. Please try again.");
+    }
   }
 
-  function reject(email){
+  async function reject(email){
     const u = users.find(x => x.email.toLowerCase() === String(email).toLowerCase());
     if (!u) return;
-    adminUpdateUser(email, { applicantStatus:"Rejected" });
-    notify({ role:"Admin" }, { type:"applicant_rejected", title:"Applicant rejected", body:`${u.name} rejected.` });
-    alert("Applicant rejected.");
+    try {
+      await adminUpdateUser(email, { applicantStatus:"Rejected", interested: false });
+      notify({ role:"Admin" }, { type:"applicant_rejected", title:"Applicant rejected", body:`${u.name} rejected.` });
+      alert("Applicant rejected.");
+      setOpen(null);
+    } catch (error) {
+      console.error('Failed to reject applicant:', error);
+      alert("Failed to reject applicant. Please try again.");
+    }
   }
 
   function exportApplicants(){
