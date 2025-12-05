@@ -930,7 +930,7 @@ function CoursesPage({ role }){
     });
     setShowForm(true);
   }
-  function saveCourse(){
+  async function saveCourse(){
     const code=form.code.trim();
     const title=form.title.trim();
     if(!code || !title){ alert("Code and Title are required."); return; }
@@ -946,56 +946,54 @@ function CoursesPage({ role }){
       passThreshold: Number(form.passThreshold)||70,
       isRequired: !!form.isRequired,
       tracks: form.tracks,
-      modality: form.modality.trim(),
-      hours: Number(form.hours)||"",
+      modality: form.modality.trim() || null,
+      hours: form.hours ? Number(form.hours) : null,
       active: !!form.active
     };
-    if(editId){
-      // Use API to update course
-      updateCourse(editId, obj).catch(err => {
-        console.error('Failed to update course:', err);
-        alert('Failed to save course. Please try again.');
-      });
-      logEvent("course_updated",{ code, ts: new Date().toISOString() });
+    
+    try {
+      if(editId){
+        // Use API to update course
+        await updateCourse(editId, obj);
+        logEvent("course_updated",{ code, ts: new Date().toISOString() });
 
-      // ADD ↓↓↓ — notify Manager & Trainer about UPDATE
-      notify({ role:"ECAE Manager" }, {
-        type:"course_updated",
-        title:`Course updated: ${code}`,
-        body:title,
-        targetRef:{ page:"courses", courseCode: code }
-      });
-      notify({ role:"ECAE Trainer" }, {
-        type:"course_updated",
-        title:`Course updated: ${code}`,
-        body:title,
-        targetRef:{ page:"courses", courseCode: code }
-      });
+        // Notify Manager & Trainer about UPDATE
+        notify({ role:"ECAE Manager" }, {
+          type:"course_updated",
+          title:`Course updated: ${code}`,
+          body:title,
+          targetRef:{ page:"courses", courseCode: code }
+        });
+        notify({ role:"ECAE Trainer" }, {
+          type:"course_updated",
+          title:`Course updated: ${code}`,
+          body:title,
+          targetRef:{ page:"courses", courseCode: code }
+        });
+      }else{
+        // Use API to create course
+        await addCourse(obj);
+        logEvent("course_created",{ code, ts: new Date().toISOString() });
 
-    }else{
-      // Use API to create course
-      addCourse(obj).catch(err => {
-        console.error('Failed to create course:', err);
-        alert('Failed to save course. Please try again.');
-      });
-      logEvent("course_created",{ code, ts: new Date().toISOString() });
-
-      // ADD ↓↓↓ — notify Manager & Trainer about NEW COURSE
-      notify({ role:"ECAE Manager" }, {
-        type:"course_created",
-        title:`New course added: ${code}`,
-        body:title,
-        targetRef:{ page:"courses", courseCode: code }
-      });
-      notify({ role:"ECAE Trainer" }, {
-        type:"course_created",
-        title:`New course added: ${code}`,
-        body:title,
-        targetRef:{ page:"courses", courseCode: code }
-      });
+        // Notify Manager & Trainer about NEW COURSE
+        notify({ role:"ECAE Manager" }, {
+          type:"course_created",
+          title:`New course added: ${code}`,
+          body:title,
+          targetRef:{ page:"courses", courseCode: code }
+        });
+        notify({ role:"ECAE Trainer" }, {
+          type:"course_created",
+          title:`New course added: ${code}`,
+          body:title,
+          targetRef:{ page:"courses", courseCode: code }
+        });
+      }
+      setShowForm(false);
+    } catch (err) {
+      console.error('Failed to save course:', err);
+      alert('Failed to save course: ' + (err.message || 'Please try again.'));
     }
-
-    setShowForm(false);
   }
 
   function delCourse(id){
