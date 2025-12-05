@@ -4,7 +4,7 @@ import { useStore } from "../providers/StoreProvider";
 import { classNames, computeFinalAverage, statusBadgeColor } from "../utils/helpers";
 
 export default function CandidatesPage({ role, onOpenCandidate, onEditCandidate }){
-  const { candidates, setCandidates, logEvent, courses } = useStore();
+  const { candidates, deleteCandidate: deleteCandidateAPI, logEvent, courses } = useStore();
   const [q,setQ]=useState(""); const [statusFilter,setStatusFilter]=useState("");
 
   const rows = useMemo(()=> candidates.filter(c=>{
@@ -15,10 +15,15 @@ export default function CandidatesPage({ role, onOpenCandidate, onEditCandidate 
 
   // selected is managed by parent App.jsx
 
-  function deleteCandidate(id){
+  async function deleteCandidate(id){
     if(!window.confirm("Delete this candidate? This cannot be undone.")) return;
-    setCandidates(prev=>prev.filter(c=>c.id!==id));
-    logEvent("candidate_deleted",{ id, ts:new Date().toISOString() });
+    try {
+      await deleteCandidateAPI(id);
+      logEvent("candidate_deleted",{ id, ts:new Date().toISOString() });
+    } catch (error) {
+      console.error('Failed to delete candidate:', error);
+      alert('Failed to delete candidate. Please try again.');
+    }
   }
 
   return (
