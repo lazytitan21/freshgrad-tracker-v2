@@ -2124,17 +2124,21 @@ function HiringTrackerPage(){
 
   const STAGES = HIRING_STAGES;
 
+  // Only candidates who have completed training should be in hiring tracker
+  const eligibleStatuses = ["Graduated", "Ready for Hiring", "Hired", "Deployed"];
+  
   useEffect(() => {
-    // Initialize hiring data for candidates without it
+    // Initialize hiring data for candidates who completed training but don't have hiring data yet
     candidates.forEach(c => {
-      if ((c.status==="Graduated" || c.status==="Ready for Hiring") && !c.hiring) {
+      if (eligibleStatuses.includes(c.status) && !c.hiring) {
         updateCandidate(c.id, { ...c, hiring: { stage: "Graduated", updatedAt: new Date().toISOString(), notes: "" } });
       }
     });
   }, [candidates, updateCandidate]);
 
   const rows = useMemo(() => {
-    const list = (candidates||[]).filter(c => c.hiring);
+    // Only show candidates who have completed training (Graduated, Ready for Hiring, etc.)
+    const list = (candidates||[]).filter(c => eligibleStatuses.includes(c.status) || c.hiring?.stage === "Assigned School" || c.hiring?.stage === "Rejected/Closed");
     const s = q.toLowerCase();
     const filteredBySearch = list.filter(c =>
       (c.name||"").toLowerCase().includes(s) ||
@@ -2147,7 +2151,8 @@ function HiringTrackerPage(){
   }, [candidates, q, stageFilter]);
 
   const kpis = useMemo(() => {
-    const list = (candidates||[]).filter(c => c.hiring);
+    // Only count candidates who have completed training
+    const list = (candidates||[]).filter(c => eligibleStatuses.includes(c.status) || c.hiring?.stage === "Assigned School" || c.hiring?.stage === "Rejected/Closed");
     const total = list.length;
     const byStage = STAGES.reduce((acc,s)=>{ acc[s]=0; return acc; }, {});
     list.forEach(c => { byStage[c.hiring?.stage || "Graduated"] = (byStage[c.hiring?.stage || "Graduated"]||0)+1; });
@@ -2185,7 +2190,7 @@ function HiringTrackerPage(){
       { key:"updatedAt", label:"Updated" },
     ];
 
-    const rows = (candidates||[]).filter(c => c.hiring).map(c => ({
+    const rows = (candidates||[]).filter(c => eligibleStatuses.includes(c.status) || c.hiring?.stage === "Assigned School" || c.hiring?.stage === "Rejected/Closed").map(c => ({
       id: c.id,
       name: c.name,
       email: c.email,
