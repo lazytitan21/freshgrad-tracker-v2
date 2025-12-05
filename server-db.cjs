@@ -107,7 +107,7 @@ async function initDatabase() {
 // ========== API ROUTES ==========
 
 // App version - update this to track deployments
-const APP_VERSION = '2.6.0';
+const APP_VERSION = '2.7.0';
 
 // Health check
 app.get('/health', async (req, res) => {
@@ -247,7 +247,12 @@ app.get('/api/users/:email', async (req, res) => {
     
     // Merge profile_data into response for frontend compatibility
     const profileData = user.profile_data || {};
-    const response = { ...userWithoutPassword, ...profileData };
+    const response = { 
+      ...userWithoutPassword, 
+      ...profileData,
+      // Map database field names to frontend field names
+      applicantStatus: user.applicant_status || profileData.applicantStatus
+    };
     
     res.json(response);
   } catch (error) {
@@ -260,13 +265,14 @@ app.get('/api/users/:email', async (req, res) => {
 app.put('/api/users/:email', async (req, res) => {
   try {
     // Extract known fields and store rest in profile_data
-    const { name, role, applicantStatus, applicant_status, docs, interested, ...otherFields } = req.body;
+    const { name, role, applicantStatus, applicant_status, docs, interested, candidateId, ...otherFields } = req.body;
     
     // Build profile_data from all the profile fields sent by frontend
     // This includes: dob, gender, preferredSubject, emirate, contactNumber, 
-    // yearsExperience, currentJob, emiratesIdNumber, otherNotes, etc.
+    // yearsExperience, currentJob, emiratesIdNumber, otherNotes, candidateId, etc.
     const profileFields = { ...otherFields };
     if (interested !== undefined) profileFields.interested = interested;
+    if (candidateId !== undefined) profileFields.candidateId = candidateId;
     
     const result = await pool.query(
       `UPDATE users 

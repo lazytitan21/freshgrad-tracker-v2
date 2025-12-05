@@ -27,6 +27,25 @@ export function AuthProvider({ children }){
     } catch (e) { void e; } 
   }, [user]);
 
+  // Refresh user profile from server on app load (to get latest applicantStatus, candidateId, etc.)
+  useEffect(() => {
+    async function refreshUserProfile() {
+      if (user?.email) {
+        try {
+          const freshUserData = await api.get(API_ENDPOINTS.userByEmail(user.email));
+          if (freshUserData) {
+            console.log('🔄 Refreshed user profile from server');
+            setUser(curr => ({ ...curr, ...freshUserData }));
+          }
+        } catch (error) {
+          console.log('Could not refresh user profile:', error.message);
+        }
+      }
+    }
+    refreshUserProfile();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Register new user via API
   async function register({ name, email, password }){
     const e = String(email || "").trim().toLowerCase();
