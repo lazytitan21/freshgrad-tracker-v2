@@ -110,9 +110,12 @@ export function StoreProvider({ children }) {
 
   async function addCourse(course) {
     try {
+      console.log('📤 Sending course to API:', course);
+      console.log('📤 API URL:', API_ENDPOINTS.courses);
       const newCourse = await api.post(API_ENDPOINTS.courses, course);
+      console.log('📥 Received from API:', newCourse);
       setCourses(prev => [newCourse, ...prev]);
-      console.log('✅ Added course');
+      console.log('✅ Added course to state');
       return newCourse;
     } catch (error) {
       console.error('❌ Failed to add course:', error);
