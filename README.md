@@ -90,6 +90,7 @@ npm run server   # Backend (port 3000)
 | Document | Description |
 |----------|-------------|
 | [GETTING-STARTED.md](./docs/GETTING-STARTED.md) | **New user setup guide** - complete walkthrough |
+| [COPILOT-GUIDE.md](./docs/COPILOT-GUIDE.md) | **VS Code + Copilot** deployment guide |
 | [DEPLOYMENT.md](./docs/DEPLOYMENT.md) | Deployment guide for Render |
 | [TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md) | Common issues & solutions |
 | [API.md](./docs/API.md) | Complete API reference |
