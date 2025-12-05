@@ -1,164 +1,140 @@
-# FreshGrad Training Tracker
+# FreshGrad Tracker (Talent Tracking System)
 
-A web application to track the journey of students from training through to hiring as teachers. Built for the UAE Ministry of Education (MOE).
+A comprehensive web application for managing student journeys from application through training to hiring and deployment. Built for MOE-ECAE talent management.
 
-## 🎯 Features
+## 🚀 Live Application
 
-- **Student/Candidate Management**: Track candidates through their entire journey from application to hiring
-- **Course Catalog**: Manage training courses across multiple tracks (STEM, Languages, ICT)
-- **Mentor Management**: Coordinate mentors and their assignments
-- **User Management**: Role-based access control (Admin, Auditor, Manager, Trainer)
-- **Progress Tracking**: Monitor course enrollments, completions, and assessments
-- **Reporting**: Export data to Excel for analysis and reporting
-- **Notifications**: In-app notification system for important updates
-- **Audit Trail**: Complete audit log of all system actions
+**Production:** https://freshgrad-tracker-v2.onrender.com
 
-## 🏗️ Architecture
+## ✨ Features
 
-### Frontend
-- **React 19** with Vite for fast development and optimized builds
-- **Tailwind CSS** for styling
-- **Framer Motion** for smooth animations
-- **Lucide React** for icons
-- **XLSX** for Excel import/export
+### Core Functionality
+- **User Authentication** - Registration, login, role-based access control
+- **Applicant Management** - Student applications with accept/reject workflow
+- **Candidate Tracking** - Track students through training programs
+- **Course Management** - Create and manage training courses
+- **Mentor Assignment** - Assign mentors to candidates
+- **Results Upload** - Bulk upload training results via Excel
+- **Graduation Review** - Review and graduate candidates
+- **Hiring Tracker** - Track candidates through hiring pipeline
+- **News/Updates** - Post announcements with category filters
 
-### Backend
-- **Node.js** with Express
-- **Local JSON file storage** (no database required)
-- **RESTful API** architecture
-- **CORS** enabled for cross-origin requests
+### User Experience
+- Responsive design (mobile-friendly)
+- Real-time data updates
+- Excel import/export
+- Dashboard with statistics
+- Notification system
 
-### Storage
-- Simple JSON files stored on the server filesystem
-- No database setup required
-- Perfect for MVP and small-scale deployments
-- Free (no additional costs beyond App Service)
+## 🛠 Tech Stack
 
-## 🚀 Quick Start
-
-### Development
-
-1. **Install dependencies**:
-   ```bash
-   npm install
-   cd server && npm install && cd ..
-   ```
-
-2. **Start development server**:
-   ```bash
-   npm run dev
-   ```
-   Access at: http://localhost:5173
-
-3. **Start API server** (in a separate terminal):
-   ```bash
-   cd server
-   npm run dev
-   ```
-   API available at: http://localhost:3001
-
-### Building for Production
-
-1. **Build the application**:
-   ```bash
-   node node_modules\vite\bin\vite.js build
-   ```
-
-2. **Create deployment package**:
-   ```bash
-   node create-deploy-zip.js
-   ```
-
-   This creates `azure-deploy.zip` ready for Azure deployment.
-
-## 🌐 Deployment
-
-See [DEPLOYMENT-GUIDE.md](DEPLOYMENT-GUIDE.md) for detailed deployment instructions for Azure App Service.
-
-### Quick Deploy to Azure
-
-1. Build the deployment package (see above)
-2. Upload `azure-deploy.zip` to Azure via Kudu+ ZIP Push Deploy
-3. Install server dependencies via Kudu console:
-   ```bash
-   cd site/wwwroot/server
-   npm install --production
-   ```
-4. Set startup command: `node server/src/index.js`
-5. Restart the app
-
-## 🔐 Default Login
-
-After deployment, log in with:
-- **Email**: firas.kiftaro@moe.gov.ae
-- **Password**: 1234
-
-⚠️ **Change the password immediately after first login!**
-
-## 📊 Data Management
-
-### Storage Location
-All data is stored in JSON files at `server/data/`:
-- `users.json` - User accounts
-- `candidates.json` - Student records
-- `courses.json` - Course catalog
-- `mentors.json` - Mentors
-- `notifications.json` - Notifications
-- `audit.json` - Audit logs
-- `corrections.json` - Course corrections
-
-### Backup & Export
-Use the built-in export features to download data as Excel files regularly.
-
-### Import
-Upload Excel files through the app's import features to bulk-add data.
-
-## 🛠️ Technology Stack
-
-- **Frontend**: React, Vite, Tailwind CSS, Framer Motion
-- **Backend**: Node.js, Express
-- **Storage**: Local JSON files
-- **Deployment**: Azure App Service
-- **Icons**: Lucide React
-- **File Processing**: XLSX (SheetJS)
+| Layer | Technology |
+|-------|------------|
+| Frontend | React 18, Vite 5, Tailwind CSS |
+| Backend | Node.js, Express 4 |
+| Database | PostgreSQL |
+| Hosting | Render.com |
 
 ## 📁 Project Structure
 
 ```
-freshgrad-tracker/
-├── public/              # Static assets
-│   ├── users.json       # User data backup
-│   └── Heros/           # Hero images
-├── src/                 # React application
-│   ├── components/      # Reusable components
-│   ├── pages/           # Page components
-│   ├── providers/       # Context providers
-│   ├── config/          # Configuration
-│   └── utils/           # Helper functions
-├── server/              # Backend API
-│   └── src/
-│       ├── config/      # Storage configuration
-│       ├── routes/      # API routes
-│       └── services/    # Business logic
-├── dist/                # Production build (generated)
-└── web.config           # IIS configuration for Azure
+freshgrad-tracker-v2/
+├── src/                    # React frontend source
+│   ├── App.jsx             # Main app with all pages
+│   ├── providers/          # Auth & state management
+│   └── components/         # Reusable UI components
+├── public/                 # Static assets
+├── docs/                   # Documentation
+├── server-db.cjs           # Express server + PostgreSQL
+├── render.yaml             # Render deployment config
+└── package.json            # Dependencies
+```
 
-## 🧪 Testing
+## 🏃 Quick Start
 
-The application is production-ready with:
-- ✅ No sample data
-- ✅ Single admin user
-- ✅ Clean codebase
-- ✅ Error handling
-- ✅ Audit logging
+### Prerequisites
+- Node.js 18+
+- PostgreSQL (or use Render's hosted database)
+
+### Local Development
+
+```bash
+# Clone repository
+git clone https://github.com/lazytitan21/freshgrad-tracker-v2.git
+cd freshgrad-tracker-v2
+
+# Install dependencies
+npm install
+
+# Set up environment
+cp .env.example .env
+# Edit .env with your DATABASE_URL
+
+# Start development
+npm run dev      # Frontend (port 5173)
+npm run server   # Backend (port 3000)
+```
+
+## 👥 User Roles
+
+| Role | Access |
+|------|--------|
+| Admin | Full access, user management |
+| ECAE Manager | Candidates, courses, hiring |
+| ECAE Trainer | Courses, results upload |
+| Auditor | Read-only, exports |
+| Student | Own profile, enrollment |
+
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [DEPLOYMENT.md](./docs/DEPLOYMENT.md) | Deployment guide for Render |
+| [TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md) | Common issues & solutions |
+| [API.md](./docs/API.md) | Complete API reference |
+| [DATABASE.md](./docs/DATABASE.md) | Database schema |
+| [ARCHITECTURE.md](./docs/ARCHITECTURE.md) | System architecture |
+| [DEVELOPMENT.md](./docs/DEVELOPMENT.md) | Development guide |
+| [CONTRIBUTING.md](./docs/CONTRIBUTING.md) | Contribution guidelines |
+| [CHANGELOG.md](./docs/CHANGELOG.md) | Version history |
+
+## 🔧 Scripts
+
+```bash
+npm run dev      # Start Vite dev server
+npm run build    # Build for production
+npm run server   # Start Express server
+npm start        # Start server (production)
+```
+
+## 🚀 Deployment
+
+The app deploys automatically to Render on push to `main`:
+
+1. Push code to GitHub
+2. Render detects changes
+3. Builds frontend (`npm run build`)
+4. Starts server (`node server-db.cjs`)
+5. Available at production URL
+
+See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for details.
+
+## 🔌 API Quick Reference
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /health` | Health check |
+| `GET/POST /api/users` | User management |
+| `GET/POST /api/candidates` | Candidate management |
+| `GET/POST /api/courses` | Course management |
+| `GET/POST /api/mentors` | Mentor management |
+| `GET/POST /api/news` | News/updates |
+
+See [API.md](./docs/API.md) for full reference.
 
 ## 📝 License
 
-Proprietary - UAE Ministry of Education
+MIT License
 
-## 🆘 Support
+---
 
-For issues or questions, check:
-- [DEPLOYMENT-GUIDE.md](DEPLOYMENT-GUIDE.md) for deployment help
-- Application audit logs for user actions
-- Azure App Service logs for technical issues
