@@ -168,7 +168,7 @@ function CandidateDrawer({ open, onClose, candidate, role, generateCandidatePDF,
             </Section>
 
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <Info label="National ID" value={candidate.nationalId || "—"} />
+              <Info label="Emirates ID" value={candidate.nationalId || "—"} />
               <Info label="Emirate" value={(
                 <select className="rounded-lg border px-3 py-2 w-48 text-sm" value={candidate.emirate || ""} onChange={e => updateCandidate({ emirate: e.target.value })}>
                   <option value="">Select emirate…</option>

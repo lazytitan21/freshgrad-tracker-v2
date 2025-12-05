@@ -113,7 +113,7 @@ function generateCandidatePDF(candidate, courses, userName){
     ["Final Average", finalAvg == null ? "—" : String(finalAvg)],
     ["Email", candidate.email],
     ["Mobile", candidate.mobile],
-    ["National ID", candidate.nationalId || "—"],
+    ["Emirates ID", candidate.nationalId || "—"],
   ];
   // Training progress (% completed out of assigned) — show only if in training stage
   (function(){
@@ -280,7 +280,7 @@ doc.setTextColor(17,24,39);
 
 // ------------------------------ Template helpers ------------------------------
 function buildIntakeTemplateCSV(){
-  const hdr=["Full Name","Subject","GPA","Emirate","Email","Mobile","National ID","Source Batch"];
+  const hdr=["Full Name","Subject","GPA","Emirate","Email","Mobile","Emirates ID","Source Batch"];
   const sample=[
     ["Sara Ahmed","Mathematics","3.75","Dubai","sara.ahmed@example.ae","0501234567","784-XXXX-XXXXXXX-0","Batch A"],
     ["Omar Ali","Arabic","3.20","Sharjah","omar.ali@example.ae","0507654321","784-YYYY-YYYYYYY-1","Batch A"],
@@ -296,7 +296,7 @@ function DownloadTemplateButton({ filename, buildCSV }){
       const url = URL.createObjectURL(blob);
       setHref(url);
       return ()=>URL.revokeObjectURL(url);
-    }catch(e){ void e; setHref("data:text/csv;charset=utf-8,"+encodeURIComponent("Full Name,Subject,GPA,Emirate,Email,Mobile,National ID,Source Batch\n")); }
+    }catch(e){ void e; setHref("data:text/csv;charset=utf-8,"+encodeURIComponent("Full Name,Subject,GPA,Emirate,Email,Mobile,Emirates ID,Source Batch\n")); }
   },[buildCSV]);
   return <a href={href} download={filename} className="rounded-xl border px-4 py-2 inline-flex items-center justify-center">Download Template</a>;
 }
@@ -1168,7 +1168,7 @@ function AddCandidateModal({ open, onClose, onAdded }){
                 <option value="">Select…</option>{SUBJECTS.map(x=><option key={x} value={x}>{x}</option>)}
               </select></label>
               <label>GPA* <input type="number" step="0.01" className="w-full rounded border px-2 py-1" value={form.gpa} onChange={e=>setForm({...form,gpa:e.target.value})} /></label>
-              <label className="col-span-2">National ID <input className="w-full rounded border px-2 py-1" value={form.nationalId} onChange={e=>setForm({...form,nationalId:e.target.value})} /></label>
+              <label className="col-span-2">Emirates ID <input className="w-full rounded border px-2 py-1" placeholder="784-XXXX-XXXXXXX-X" value={form.nationalId} onChange={e=>setForm({...form,nationalId:e.target.value})} /></label>
             </div>
             {err && <div className="mt-2 text-sm text-rose-600">{err}</div>}
             <div className="mt-4 flex gap-2"><button className="rounded-xl bg-slate-900 text-white px-4 py-2" onClick={submit}>Create</button><button className="rounded-xl border px-4 py-2" onClick={onClose}>Cancel</button></div>
@@ -1257,7 +1257,7 @@ function EditCandidateModal({ open, candidate, onClose }) {
                 <option value="">Select…</option>{SUBJECTS.map(x=><option key={x} value={x}>{x}</option>)}
               </select></label>
               <label>GPA* <input type="number" step="0.01" className="w-full rounded border px-2 py-1" value={form.gpa} onChange={e=>setForm({...form,gpa:e.target.value})} /></label>
-              <label className="col-span-2">National ID <input className="w-full rounded border px-2 py-1" value={form.nationalId} onChange={e=>setForm({...form,nationalId:e.target.value})} /></label>
+              <label className="col-span-2">Emirates ID <input className="w-full rounded border px-2 py-1" placeholder="784-XXXX-XXXXXXX-X" value={form.nationalId} onChange={e=>setForm({...form,nationalId:e.target.value})} /></label>
             </div>
 
             {err && <div className="mt-2 text-sm text-rose-600">{err}</div>}
