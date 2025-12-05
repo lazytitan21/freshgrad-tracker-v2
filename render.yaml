@@ -1,6 +1,12 @@
 # Render.com Configuration
 # This file tells Render how to build and run the app
 
+databases:
+  - name: freshgrad-tracker-db
+    databaseName: freshgrad_tracker
+    user: freshgrad_user
+    plan: free
+
 services:
   - type: web
     name: freshgrad-tracker
@@ -8,8 +14,12 @@ services:
     region: oregon
     plan: free
     buildCommand: npm install
-    startCommand: node server.cjs
-    healthCheckPath: /
+    startCommand: node server-db.cjs
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: freshgrad-tracker-db
+          property: connectionString
