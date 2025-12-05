@@ -931,8 +931,10 @@ function CoursesPage({ role }){
     setShowForm(true);
   }
   async function saveCourse(){
+    console.log('🔵 saveCourse() called');
     const code=form.code.trim();
     const title=form.title.trim();
+    console.log('🔵 Form data:', { code, title, editId });
     if(!code || !title){ alert("Code and Title are required."); return; }
     if(!/^[A-Za-z0-9-_.]+$/.test(code)){ alert("Code should be letters/digits/-_."); return; }
     const exists = courses.some(c => c.code.toLowerCase()===code.toLowerCase() && c.id!==editId);
@@ -950,11 +952,14 @@ function CoursesPage({ role }){
       hours: form.hours ? Number(form.hours) : null,
       active: !!form.active
     };
+    console.log('🔵 Course object created:', obj);
     
     try {
       if(editId){
+        console.log('🔵 Updating existing course...');
         // Use API to update course
         await updateCourse(editId, obj);
+        console.log('🔵 Course updated successfully');
         logEvent("course_updated",{ code, ts: new Date().toISOString() });
 
         // Notify Manager & Trainer about UPDATE
@@ -971,8 +976,10 @@ function CoursesPage({ role }){
           targetRef:{ page:"courses", courseCode: code }
         });
       }else{
+        console.log('🔵 Creating new course via API...');
         // Use API to create course
         await addCourse(obj);
+        console.log('🔵 Course created successfully');
         logEvent("course_created",{ code, ts: new Date().toISOString() });
 
         // Notify Manager & Trainer about NEW COURSE
