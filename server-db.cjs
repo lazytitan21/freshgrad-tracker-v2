@@ -107,7 +107,7 @@ async function initDatabase() {
 // ========== API ROUTES ==========
 
 // App version - update this to track deployments
-const APP_VERSION = '2.4.0';
+const APP_VERSION = '2.5.0';
 
 // Health check
 app.get('/health', async (req, res) => {
@@ -386,6 +386,11 @@ app.post('/api/candidates', async (req, res) => {
             nationalId, national_id, sourceBatch, source_batch, enrollments, hiring, ...otherFields } = req.body;
     const candidateId = id || `C-${Date.now()}`;
     
+    // Handle empty string for GPA - convert to null for DECIMAL column
+    const gpaValue = gpa === '' || gpa === undefined || gpa === null ? null : Number(gpa) || null;
+    
+    console.log('📝 Creating candidate:', { candidateId, name, email, gpaValue });
+    
     const result = await pool.query(
       `INSERT INTO candidates (id, name, email, mobile, subject, emirate, gpa, status, sponsor, track_id, national_id, source_batch, enrollments, hiring, candidate_data, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
@@ -406,7 +411,7 @@ app.post('/api/candidates', async (req, res) => {
          candidate_data = COALESCE(candidates.candidate_data, '{}'::jsonb) || EXCLUDED.candidate_data,
          updated_at = NOW()
        RETURNING *`,
-      [candidateId, name, email, mobile, subject, emirate, gpa, status || 'Imported', sponsor, 
+      [candidateId, name, email, mobile, subject, emirate, gpaValue, status || 'Imported', sponsor, 
        track_id || trackId, national_id || nationalId, source_batch || sourceBatch,
        JSON.stringify(enrollments || []), JSON.stringify(hiring || {}), JSON.stringify(otherFields)]
     );
@@ -478,6 +483,9 @@ app.put('/api/candidates/:id', async (req, res) => {
     const { name, email, mobile, subject, emirate, gpa, status, sponsor, track_id, trackId,
             nationalId, national_id, sourceBatch, source_batch, enrollments, hiring, ...otherFields } = req.body;
     
+    // Handle empty string for GPA - convert to null for DECIMAL column
+    const gpaValue = gpa === '' || gpa === undefined ? null : (gpa === null ? null : Number(gpa) || null);
+    
     const result = await pool.query(
       `UPDATE candidates 
        SET name = COALESCE($2, name),
@@ -497,7 +505,7 @@ app.put('/api/candidates/:id', async (req, res) => {
            updated_at = NOW()
        WHERE id = $1
        RETURNING *`,
-      [req.params.id, name, email, mobile, subject, emirate, gpa, status, sponsor,
+      [req.params.id, name, email, mobile, subject, emirate, gpaValue, status, sponsor,
        track_id || trackId, national_id || nationalId, source_batch || sourceBatch,
        enrollments ? JSON.stringify(enrollments) : null, hiring ? JSON.stringify(hiring) : null,
        JSON.stringify(otherFields)]
