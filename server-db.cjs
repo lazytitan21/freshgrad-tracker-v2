@@ -46,6 +46,28 @@ async function initDatabase() {
       const schema = fsSync.readFileSync(schemaPath, 'utf8');
       await pool.query(schema);
       console.log('✅ Database schema initialized');
+      
+      // Add new columns if they don't exist (migration for existing databases)
+      const migrations = [
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_birth DATE',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(20)',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS subject VARCHAR(100)',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS emirate VARCHAR(100)',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS mobile VARCHAR(50)',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS emirates_id VARCHAR(50)',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title VARCHAR(255)',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS teaching_experience INTEGER',
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_data JSONB DEFAULT '{}'::jsonb"
+      ];
+      
+      for (const migration of migrations) {
+        try {
+          await pool.query(migration);
+        } catch (e) {
+          // Column might already exist, ignore error
+        }
+      }
+      console.log('✅ Database migrations applied');
     } else {
       console.warn('⚠️ schema.sql not found, skipping initialization');
     }
@@ -83,7 +105,7 @@ app.post('/api/users/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const result = await pool.query(
-      'SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND password = $2',
+      'SELECT id, email, password, name, role, created_at, verified, applicant_status, docs, date_of_birth, gender, subject, emirate, mobile, emirates_id, job_title, teaching_experience, profile_data FROM users WHERE LOWER(email) = LOWER($1) AND password = $2',
       [email, password]
     );
     
@@ -116,18 +138,17 @@ app.post('/api/users/auth/register', async (req, res) => {
       return res.status(409).json({ error: 'Email already exists' });
     }
     
-    // Insert new user
+    // Insert new user with all profile fields initialized
     const result = await pool.query(
-      `INSERT INTO users (email, password, name, role, created_at, verified, applicant_status, docs)
-       VALUES ($1, $2, $3, $4, NOW(), true, 'None', '{}'::jsonb)
-       RETURNING *`,
+      `INSERT INTO users (email, password, name, role, created_at, verified, applicant_status, docs, profile_data)
+       VALUES ($1, $2, $3, $4, NOW(), true, 'None', '{}'::jsonb, '{}'::jsonb)
+       RETURNING id, email, name, role, created_at, verified, applicant_status, docs, date_of_birth, gender, subject, emirate, mobile, emirates_id, job_title, teaching_experience, profile_data`,
       [email.toLowerCase(), password, name, role || 'Teacher']
     );
     
     const newUser = result.rows[0];
-    const { password: _, ...userWithoutPassword } = newUser;
     console.log('✅ User registered:', newUser.email);
-    res.status(201).json(userWithoutPassword);
+    res.status(201).json(newUser);
   } catch (error) {
     console.error('Register error:', error);
     res.status(500).json({ error: 'Registration failed' });
@@ -137,11 +158,114 @@ app.post('/api/users/auth/register', async (req, res) => {
 // Users - Get all
 app.get('/api/users', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, email, name, role, created_at, verified, applicant_status, docs FROM users ORDER BY created_at DESC');
+    const result = await pool.query('SELECT id, email, name, role, created_at, verified, applicant_status, docs, date_of_birth, gender, subject, emirate, mobile, emirates_id, job_title, teaching_experience, profile_data FROM users ORDER BY created_at DESC');
     res.json(result.rows);
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// Users - Get by email
+app.get('/api/users/:email', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, email, name, role, created_at, verified, applicant_status, docs, date_of_birth, gender, subject, emirate, mobile, emirates_id, job_title, teaching_experience, profile_data FROM users WHERE LOWER(email) = LOWER($1)',
+      [req.params.email]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Get user error:', error);
+    res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+// Users - Update profile
+app.put('/api/users/:email', async (req, res) => {
+  try {
+    const { name, role, applicant_status, docs, date_of_birth, gender, subject, emirate, mobile, emirates_id, job_title, teaching_experience, profile_data,
+            // Also accept camelCase from frontend
+            dateOfBirth, teachingExperience, emiratesId, applicantStatus, jobTitle, profileData } = req.body;
+    
+    const result = await pool.query(
+      `UPDATE users 
+       SET name = COALESCE($2, name),
+           role = COALESCE($3, role),
+           applicant_status = COALESCE($4, $5, applicant_status),
+           docs = COALESCE($6, docs),
+           date_of_birth = COALESCE($7, $8, date_of_birth),
+           gender = COALESCE($9, gender),
+           subject = COALESCE($10, subject),
+           emirate = COALESCE($11, emirate),
+           mobile = COALESCE($12, mobile),
+           emirates_id = COALESCE($13, $14, emirates_id),
+           job_title = COALESCE($15, $16, job_title),
+           teaching_experience = COALESCE($17, $18, teaching_experience),
+           profile_data = COALESCE($19, $20, profile_data)
+       WHERE LOWER(email) = LOWER($1)
+       RETURNING id, email, name, role, created_at, verified, applicant_status, docs, date_of_birth, gender, subject, emirate, mobile, emirates_id, job_title, teaching_experience, profile_data`,
+      [req.params.email, name, role, applicant_status, applicantStatus, docs, 
+       date_of_birth, dateOfBirth, gender, subject, emirate, mobile, 
+       emirates_id, emiratesId, job_title, jobTitle, teaching_experience, teachingExperience,
+       profile_data ? JSON.stringify(profile_data) : null, profileData ? JSON.stringify(profileData) : null]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    console.log('✅ User profile updated:', req.params.email);
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// Users - Update password
+app.post('/api/users/:email/password', async (req, res) => {
+  try {
+    const { password } = req.body;
+    
+    const result = await pool.query(
+      'UPDATE users SET password = $2 WHERE LOWER(email) = LOWER($1) RETURNING email',
+      [req.params.email, password]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    console.log('✅ Password updated for:', req.params.email);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update password error:', error);
+    res.status(500).json({ error: 'Failed to update password' });
+  }
+});
+
+// Users - Delete
+app.delete('/api/users/:email', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'DELETE FROM users WHERE LOWER(email) = LOWER($1) RETURNING email',
+      [req.params.email]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    console.log('✅ User deleted:', req.params.email);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ error: 'Failed to delete user' });
   }
 });
 

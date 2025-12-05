@@ -11,7 +11,17 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     verified BOOLEAN DEFAULT true,
     applicant_status VARCHAR(50) DEFAULT 'None',
-    docs JSONB DEFAULT '{}'::jsonb
+    docs JSONB DEFAULT '{}'::jsonb,
+    -- Profile fields
+    date_of_birth DATE,
+    gender VARCHAR(20),
+    subject VARCHAR(100),
+    emirate VARCHAR(100),
+    mobile VARCHAR(50),
+    emirates_id VARCHAR(50),
+    job_title VARCHAR(255),
+    teaching_experience INTEGER,
+    profile_data JSONB DEFAULT '{}'::jsonb
 );
 
 -- Candidates Table
