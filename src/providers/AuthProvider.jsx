@@ -15,6 +15,9 @@ export function AuthProvider({ children }){
 
   // Store all users (loaded from server for admin)
   const [users, setUsers] = useState([]);
+  
+  // Track if user profile has been refreshed
+  const [profileRefreshed, setProfileRefreshed] = useState(false);
 
   // Save current user to localStorage (session persistence only)
   useEffect(() => { 
@@ -30,15 +33,19 @@ export function AuthProvider({ children }){
   // Refresh user profile from server on app load (to get latest applicantStatus, candidateId, etc.)
   useEffect(() => {
     async function refreshUserProfile() {
-      if (user?.email) {
+      if (user?.email && !profileRefreshed) {
         try {
+          console.log('🔄 Refreshing user profile from server...');
           const freshUserData = await api.get(API_ENDPOINTS.userByEmail(user.email));
           if (freshUserData) {
-            console.log('🔄 Refreshed user profile from server');
-            setUser(curr => ({ ...curr, ...freshUserData }));
+            console.log('✅ Refreshed user profile:', freshUserData.applicantStatus, freshUserData.candidateId);
+            // Create a new user object to ensure React detects the change
+            setUser({ ...freshUserData });
+            setProfileRefreshed(true);
           }
         } catch (error) {
           console.log('Could not refresh user profile:', error.message);
+          setProfileRefreshed(true); // Don't retry on error
         }
       }
     }
@@ -83,6 +90,7 @@ export function AuthProvider({ children }){
       
       console.log('✅ Login successful:', userData.email || userData);
       setUser(userData);
+      setProfileRefreshed(true); // Fresh login data, no need to refresh
       return userData;
     } catch (error) {
       console.error('❌ Login failed:', error);
@@ -92,6 +100,7 @@ export function AuthProvider({ children }){
 
   function logout(){ 
     setUser(null); 
+    setProfileRefreshed(false);
     localStorage.removeItem("fg.authUser");
   }
 
