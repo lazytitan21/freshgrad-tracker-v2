@@ -107,7 +107,7 @@ async function initDatabase() {
 // ========== API ROUTES ==========
 
 // App version - update this to track deployments
-const APP_VERSION = '2.7.0';
+const APP_VERSION = '2.8.0';
 
 // Health check
 app.get('/health', async (req, res) => {
@@ -129,6 +129,16 @@ app.get('/health', async (req, res) => {
       error: error.message
     });
   }
+});
+
+// Hero images endpoint (for landing page)
+app.get('/api/heros', (req, res) => {
+  // Return default hero images
+  res.json([
+    { id: 1, src: '/Heros/hero1.jpg', alt: 'Students learning' },
+    { id: 2, src: '/Heros/hero2.jpg', alt: 'Classroom scene' },
+    { id: 3, src: '/Heros/hero3.jpg', alt: 'Graduation' }
+  ]);
 });
 
 // Debug endpoint - check table columns
