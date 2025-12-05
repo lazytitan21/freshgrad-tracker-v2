@@ -107,7 +107,7 @@ async function initDatabase() {
 // ========== API ROUTES ==========
 
 // App version - update this to track deployments
-const APP_VERSION = '2.3.0';
+const APP_VERSION = '2.4.0';
 
 // Health check
 app.get('/health', async (req, res) => {

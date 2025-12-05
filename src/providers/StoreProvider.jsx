@@ -60,9 +60,12 @@ export function StoreProvider({ children }) {
 
   async function addCandidate(candidate) {
     try {
+      console.log('📤 Sending candidate to API:', candidate);
+      console.log('📤 API URL:', API_ENDPOINTS.candidates);
       const newCandidate = await api.post(API_ENDPOINTS.candidates, candidate);
+      console.log('📥 Received from API:', newCandidate);
       setCandidates(prev => [newCandidate, ...prev]);
-      console.log('✅ Added candidate');
+      console.log('✅ Added candidate to state');
       return newCandidate;
     } catch (error) {
       console.error('❌ Failed to add candidate:', error);

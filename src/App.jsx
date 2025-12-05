@@ -3151,8 +3151,13 @@ function ApplicantsPage(){
   );
 
   async function accept(email){
+    console.log('🔵 Accept clicked for:', email);
     const u = users.find(x => x.email.toLowerCase() === String(email).toLowerCase());
-    if (!u) return;
+    if (!u) {
+      console.log('❌ User not found:', email);
+      return;
+    }
+    console.log('🔵 Found user:', u.name, u.email);
     const id = `C-${Date.now().toString().slice(-6)}`;
     const trackId = subjectToTrackId(u.preferredSubject || "");
     const newC = {
@@ -3171,14 +3176,19 @@ function ApplicantsPage(){
       enrollments: [],
       notesThread: [{ id:`N-${id}`, who:"Admin", text:"Accepted from applicants.", ts:new Date().toISOString() }]
     };
+    console.log('🔵 Creating candidate:', newC);
     try {
+      console.log('🔵 Calling addCandidate...');
       await addCandidate(newC);
+      console.log('✅ Candidate added successfully');
+      console.log('🔵 Updating user status...');
       await adminUpdateUser(email, { applicantStatus: "Accepted", candidateId: id, interested: false });
+      console.log('✅ User updated successfully');
       notify({ role:"Admin" }, { type:"applicant_accepted", title:"Applicant accepted", body:`${u.name} moved to Candidates`, target:{ page:"candidates", candidateId:id } });
       alert("Applicant accepted and added to Candidates.");
       setOpen(null);
     } catch (error) {
-      console.error('Failed to accept applicant:', error);
+      console.error('❌ Failed to accept applicant:', error);
       alert("Failed to accept applicant. Please try again.");
     }
   }
