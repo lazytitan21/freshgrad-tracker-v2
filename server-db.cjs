@@ -106,19 +106,24 @@ async function initDatabase() {
 
 // ========== API ROUTES ==========
 
+// App version - update this to track deployments
+const APP_VERSION = '2.1.0';
+
 // Health check
 app.get('/health', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW()');
     res.json({ 
       status: 'ok', 
+      version: APP_VERSION,
       timestamp: new Date().toISOString(),
       database: 'connected',
       dbTime: result.rows[0].now
     });
   } catch (error) {
     res.status(500).json({
-      status: 'error', 
+      status: 'error',
+      version: APP_VERSION, 
       timestamp: new Date().toISOString(),
       database: 'disconnected',
       error: error.message
@@ -821,11 +826,21 @@ app.post('/api/audit', async (req, res) => {
 // Serve static files
 const distDir = path.join(__dirname, 'dist');
 if (fsSync.existsSync(distDir)) {
-  app.use(express.static(distDir));
+  // Disable caching for HTML files to ensure latest version is served
+  app.use(express.static(distDir, {
+    setHeaders: (res, path) => {
+      if (path.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+    }
+  }));
   
   // SPA fallback
   app.get('*', (req, res) => {
     if (!req.path.startsWith('/api/')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.sendFile(path.join(distDir, 'index.html'));
     } else {
       res.status(404).json({ error: 'API route not found' });
