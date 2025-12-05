@@ -134,7 +134,7 @@ app.post('/api/users/auth/register', async (req, res) => {
       email: email.toLowerCase(),
       password,
       name,
-      role: role || 'Teacher',
+      role: role || 'Student',
       createdAt: new Date().toISOString(),
       verified: true,
       applicantStatus: 'None',

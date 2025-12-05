@@ -9,7 +9,7 @@ export default function UsersManagementPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPasswords, setShowPasswords] = useState({});
 
-  // Filter only system users (not teachers/applicants)
+  // Filter only system users (not students/applicants)
   const systemUsers = users.filter(u => 
     ["Admin", "ECAE Manager", "ECAE Trainer", "Auditor"].includes(u.role)
   );

@@ -1,16 +1,16 @@
 /**
  * Applicants Data Access Layer - Azure Blob Storage
- * Note: Applicants are users with role "Teacher"
+ * Note: Applicants are users with role "Student"
  */
 
 import { readBlob, writeBlob, BLOB_NAMES } from '../config/storage.js';
 
 /**
- * Get all applicants (users with role "Teacher")
+ * Get all applicants (users with role "Student")
  */
 export async function getAllApplicants() {
   const users = await readBlob(BLOB_NAMES.users);
-  const applicants = users.filter(u => u.role === 'Teacher');
+  const applicants = users.filter(u => u.role === 'Student');
   
   // Remove passwords
   return applicants.map(user => {
@@ -25,7 +25,7 @@ export async function getAllApplicants() {
 export async function getApplicantByEmail(email) {
   const users = await readBlob(BLOB_NAMES.users);
   const normalizedEmail = email.toLowerCase().trim();
-  const user = users.find(u => u.email.toLowerCase() === normalizedEmail && u.role === 'Teacher');
+  const user = users.find(u => u.email.toLowerCase() === normalizedEmail && u.role === 'Student');
   
   if (!user) {
     return null;
@@ -40,7 +40,7 @@ export async function getApplicantByEmail(email) {
  */
 export async function getApplicantsByStatus(status) {
   const users = await readBlob(BLOB_NAMES.users);
-  const applicants = users.filter(u => u.role === 'Teacher' && u.applicantStatus === status);
+  const applicants = users.filter(u => u.role === 'Student' && u.applicantStatus === status);
   
   // Remove passwords
   return applicants.map(user => {
@@ -55,7 +55,7 @@ export async function getApplicantsByStatus(status) {
 export async function updateApplicantStatus(email, status) {
   const users = await readBlob(BLOB_NAMES.users);
   const normalizedEmail = email.toLowerCase().trim();
-  const index = users.findIndex(u => u.email.toLowerCase() === normalizedEmail && u.role === 'Teacher');
+  const index = users.findIndex(u => u.email.toLowerCase() === normalizedEmail && u.role === 'Student');
   
   if (index === -1) {
     throw new Error(`Applicant ${email} not found`);
@@ -76,7 +76,7 @@ export async function updateApplicantStatus(email, status) {
 export async function updateApplicantDocs(email, docs) {
   const users = await readBlob(BLOB_NAMES.users);
   const normalizedEmail = email.toLowerCase().trim();
-  const index = users.findIndex(u => u.email.toLowerCase() === normalizedEmail && u.role === 'Teacher');
+  const index = users.findIndex(u => u.email.toLowerCase() === normalizedEmail && u.role === 'Student');
   
   if (index === -1) {
     throw new Error(`Applicant ${email} not found`);
@@ -96,7 +96,7 @@ export async function updateApplicantDocs(email, docs) {
  */
 export async function getInterestedApplicants() {
   const users = await readBlob(BLOB_NAMES.users);
-  const applicants = users.filter(u => u.role === 'Teacher' && u.interested === true);
+  const applicants = users.filter(u => u.role === 'Student' && u.interested === true);
   
   // Remove passwords
   return applicants.map(user => {

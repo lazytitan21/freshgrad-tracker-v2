@@ -107,7 +107,7 @@ async function initDatabase() {
 // ========== API ROUTES ==========
 
 // App version - update this to track deployments
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.6.0';
 
 // Health check
 app.get('/health', async (req, res) => {
@@ -199,7 +199,7 @@ app.post('/api/users/auth/register', async (req, res) => {
       `INSERT INTO users (email, password, name, role, created_at, verified, applicant_status, docs, profile_data)
        VALUES ($1, $2, $3, $4, NOW(), true, 'None', '{}'::jsonb, '{}'::jsonb)
        RETURNING id, email, name, role, created_at, verified, applicant_status, docs, date_of_birth, gender, subject, emirate, mobile, emirates_id, job_title, teaching_experience, profile_data`,
-      [email.toLowerCase(), password, name, role || 'Teacher']
+      [email.toLowerCase(), password, name, role || 'Student']
     );
     
     const newUser = result.rows[0];

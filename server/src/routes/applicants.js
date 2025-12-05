@@ -1,6 +1,6 @@
 /**
  * Applicants API Routes
- * Specialized routes for managing teacher applicants
+ * Specialized routes for managing student applicants
  */
 
 import express from 'express';

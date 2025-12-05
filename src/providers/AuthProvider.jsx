@@ -38,7 +38,7 @@ export function AuthProvider({ children }){
         email: e,
         password: String(password),
         name: String(name || ""),
-        role: "Teacher"
+        role: "Student"
       });
       console.log('✅ User registered:', newUser.email);
       return true;
@@ -183,7 +183,7 @@ export function AuthProvider({ children }){
     }
   }
 
-  async function adminCreateUser({ name, email, role = "Teacher", password }) {
+  async function adminCreateUser({ name, email, role = "Student", password }) {
     const e = String(email || "").trim().toLowerCase();
     if (!emailRe.test(e)) throw new Error("Invalid email");
     const temp = password && String(password).trim().length >= 4 ? String(password).trim() : Math.random().toString(36).slice(2, 10);
@@ -192,7 +192,7 @@ export function AuthProvider({ children }){
       const newUser = await api.post(API_ENDPOINTS.register, {
         email: e,
         password: temp,
-        role: String(role || "Teacher"),
+        role: String(role || "Student"),
         name: String(name || "")
       });
       setUsers(prev => [newUser, ...prev]);

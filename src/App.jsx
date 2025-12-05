@@ -319,7 +319,7 @@ const NAV = [
   { id:"settings",   label:"Settings" },
 
 ];
-const ROLES = ["Admin","ECAE Manager","ECAE Trainer","Auditor","Teacher"];
+const ROLES = ["Admin","ECAE Manager","ECAE Trainer","Auditor","Student"];
 const ROLE_PERMISSIONS = {
   Admin:["dashboard","candidates","courses","import","results","graduation","applicants","exports","settings","users","hiring","enrollment","mentors"],
   "ECAE Manager":["dashboard","candidates","courses","results","graduation","applicants","hiring","enrollment","mentors"],
@@ -1993,13 +1993,13 @@ function UsersPage(){
   const { users, adminUpdateUser, adminResetPassword, adminDeleteUser, adminCreateUser, user } = useAuth();
 
   const [showAdd, setShowAdd] = useState(false);
-  const [newU, setNewU] = useState({ name: "", email: "", role: "Teacher", password: "" });
+  const [newU, setNewU] = useState({ name: "", email: "", role: "Student", password: "" });
 
   function createUser() {
     try {
       const { tempPassword } = adminCreateUser(newU);
       alert(`User created.\nEmail: ${newU.email}\nTemporary password: ${tempPassword}`);
-      setNewU({ name: "", email: "", role: "Teacher", password: "" });
+      setNewU({ name: "", email: "", role: "Student", password: "" });
       setShowAdd(false);
     } catch (e) {
       alert(e.message || "Failed to create user");
@@ -2041,7 +2041,7 @@ function UsersPage(){
     exportXLSX("Platform_Users.xlsx", rows, headers, "Users");
   }
 
-  const roleOptions = ["Admin","ECAE Manager","ECAE Trainer","Auditor","Teacher"];
+  const roleOptions = ["Admin","ECAE Manager","ECAE Trainer","Auditor","Student"];
 
   return (
     <div className="space-y-4">
@@ -2063,7 +2063,7 @@ function UsersPage(){
             <input className="rounded-xl border px-3 py-2" placeholder="Full name" value={newU.name} onChange={e=>setNewU({...newU, name:e.target.value})} />
             <input type="email" className="rounded-xl border px-3 py-2" placeholder="Email" value={newU.email} onChange={e=>setNewU({...newU, email:e.target.value})} />
             <select className="rounded-xl border px-3 py-2" value={newU.role} onChange={e=>setNewU({...newU, role:e.target.value})}>
-              {["Admin","ECAE Manager","ECAE Trainer","Auditor","Teacher"].map(r => <option key={r} value={r}>{r}</option>)}
+              {["Admin","ECAE Manager","ECAE Trainer","Auditor","Student"].map(r => <option key={r} value={r}>{r}</option>)}
             </select>
             <input className="rounded-xl border px-3 py-2" placeholder="Password (optional)" value={newU.password} onChange={e=>setNewU({...newU, password:e.target.value})} />
             <div className="md:col-span-4 flex justify-end">
@@ -2092,7 +2092,7 @@ function UsersPage(){
                   <td className="px-3 py-2">{u.name||"—"}</td>
                   <td className="px-3 py-2">{u.email}</td>
                   <td className="px-3 py-2">
-                    <select className="rounded-lg border px-2 py-1" value={u.role||"Teacher"} onChange={e=>changeRole(u.email, e.target.value)}>
+                    <select className="rounded-lg border px-2 py-1" value={u.role||"Student"} onChange={e=>changeRole(u.email, e.target.value)}>
                       {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </td>
@@ -2409,7 +2409,7 @@ export default function App(){
 }
 
 
-/* ------------------------------ Public Landing + Auth (Teacher) ------------------------------ */
+/* ------------------------------ Public Landing + Auth (Student) ------------------------------ */
 function LandingPage({ onSignIn, onSignUp }){
   const { user } = useAuth();
   const { publicNews, setPublicNews } = useStore();
@@ -2670,7 +2670,7 @@ function LandingPage({ onSignIn, onSignUp }){
             <div className="rounded-2xl border bg-white p-6 shadow-sm flex flex-col items-center text-center">
               <img src={program1} alt="Program 1" className="h-16 w-16 mb-3" />
               <div className="font-medium">In-Service PGDE</div>
-              <div className="text-sm text-slate-600 mt-1">Accredited postgraduate diploma pathway for practicing teachers.</div>
+              <div className="text-sm text-slate-600 mt-1">Accredited postgraduate diploma pathway for practicing students.</div>
             </div>
             <div className="rounded-2xl border bg-white p-6 shadow-sm flex flex-col items-center text-center">
               <img src={program2} alt="Program 2" className="h-16 w-16 mb-3" />
@@ -2708,8 +2708,8 @@ function LandingPage({ onSignIn, onSignUp }){
           <div className="font-semibold text-lg mb-4">Frequently asked</div>
           <div className="grid md:grid-cols-2 gap-6 text-sm text-slate-700">
             <div>
-              <div className="font-medium">Is Sign up only for teachers?</div>
-              <p className="mt-1">Yes, new users register as teachers. Admin and partner roles use provisioned accounts.</p>
+              <div className="font-medium">Is Sign up only for students?</div>
+              <p className="mt-1">Yes, new users register as students. Admin and partner roles use provisioned accounts.</p>
             </div>
             <div>
               <div className="font-medium">Can I edit my email later?</div>
@@ -2767,7 +2767,7 @@ function SignInPublic({ onBack, onForgot }){
   );
 }
 
-function SignUpTeacher({ onBack, onSuccess }){
+function SignUpStudent({ onBack, onSuccess }){
   const { register, requestEmailVerification, confirmEmailVerification, login } = useAuth();
   const [form, setForm] = useState({ name:"", email:"", password:"", confirm:"" });
   const [err,setErr] = useState("");
@@ -2791,7 +2791,7 @@ function SignUpTeacher({ onBack, onSuccess }){
     <div className="min-h-screen grid place-items-center bg-slate-50">
       {step==="form" && (
         <form onSubmit={submit} className="w-[520px] rounded-2xl border bg-white p-6 shadow-sm space-y-3">
-          <div className="text-lg font-semibold">Sign up — Teacher</div>
+          <div className="text-lg font-semibold">Sign up — Student</div>
           <div className="grid grid-cols-2 gap-3">
             <label className="text-sm">Full name
               <input className="mt-1 w-full rounded-xl border px-3 py-2" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} />
@@ -2911,7 +2911,7 @@ function ForgotPassword({ onBack, onSuccess, prefillEmail = "" }){
 
 
 
-function TeacherProfile(){
+function StudentProfile(){
   const { user, updateProfile, logout } = useAuth();
   const { candidates, courses, notify } = useStore();
 
@@ -2964,7 +2964,7 @@ function TeacherProfile(){
   function expressInterest(){
     updateProfile({ interested:true, applicantStatus:"Pending" });
     try {
-      notify({ role:"Admin" }, { type:"teacher_interest", title:"New teacher interest", body:`${user?.name||user?.email} wants to join MOE`, targetRef:{ page:"applicants" } });
+      notify({ role:"Admin" }, { type:"student_interest", title:"New student interest", body:`${user?.name||user?.email} wants to join MOE`, targetRef:{ page:"applicants" } });
   } catch (e) { void e; }
     alert("Your interest has been sent. An admin will review your profile.");
   }
@@ -3043,7 +3043,7 @@ function TeacherProfile(){
           ? "Pending review"
           : user?.applicantStatus == "Rejected"
           ? "Sorry .. Application Rejected"
-          : "I want to join MOE as a teacher"}
+          : "I want to join MOE as a student"}
       </button>
     </div>
   )}
@@ -3115,7 +3115,7 @@ function TeacherProfile(){
 function PublicPages({ page, setPage }){
   const [resetEmail] = useState("");
   if (page === "signin") return <SignInPublic onBack={()=>setPage("landing")} onForgot={()=>setPage("forgot")} />;
-  if (page === "signup") return <SignUpTeacher onBack={()=>setPage("landing")} onSuccess={()=>setPage("signin")} />;
+  if (page === "signup") return <SignUpStudent onBack={()=>setPage("landing")} onSuccess={()=>setPage("signin")} />;
   if (page === "forgot") return <ForgotPassword prefillEmail={resetEmail} onBack={()=>setPage("landing")} onSuccess={()=>setPage("signin")} />;
   return <LandingPage onSignIn={()=>setPage("signin")} onSignUp={()=>setPage("signup")} />;
 }
@@ -3127,7 +3127,7 @@ function Gate({ children }){
   const { user } = useAuth();
   const [publicPage, setPublicPage] = useState("landing");
   if (!user) return <PublicPages page={publicPage} setPage={setPublicPage} />;
-  if (user.role === "Teacher") return <TeacherProfile />;
+  if (user.role === "Student") return <StudentProfile />;
   return children;
 }
 
@@ -3143,7 +3143,7 @@ function ApplicantsPage(){
   const { users, adminUpdateUser } = useAuth();
   const { notify, addCandidate } = useStore();
 
-  const applicants = users.filter(u => u.role==="Teacher" && u.interested);
+  const applicants = users.filter(u => u.role==="Student" && u.interested);
   const [open, setOpen] = React.useState(null); // email of selected applicant
   const selected = React.useMemo(
     () => applicants.find(x => x.email === open) || null,
@@ -3232,8 +3232,8 @@ function ApplicantsPage(){
     <div className="space-y-4">
       <div className="rounded-2xl border bg-white p-6 shadow-sm flex items-center justify-between">
         <div>
-          <div className="text-lg font-semibold">Teacher Applicants</div>
-          <div className="text-sm text-slate-500">Interested teachers pending review</div>
+          <div className="text-lg font-semibold">Student Applicants</div>
+          <div className="text-sm text-slate-500">Interested students pending review</div>
         </div>
         <button className="rounded-xl border px-3 py-1" onClick={exportApplicants}>Export XLSX</button>
       </div>
