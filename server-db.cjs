@@ -105,7 +105,7 @@ app.post('/api/users/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const result = await pool.query(
-      'SELECT id, email, password, name, role, created_at, verified, applicant_status, docs, date_of_birth, gender, subject, emirate, mobile, emirates_id, job_title, teaching_experience, profile_data FROM users WHERE LOWER(email) = LOWER($1) AND password = $2',
+      'SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND password = $2',
       [email, password]
     );
     
@@ -115,8 +115,13 @@ app.post('/api/users/auth/login', async (req, res) => {
     
     const user = result.rows[0];
     const { password: _, ...userWithoutPassword } = user;
+    
+    // Merge profile_data into response for frontend compatibility
+    const profileData = user.profile_data || {};
+    const response = { ...userWithoutPassword, ...profileData };
+    
     console.log('✅ Login successful:', user.email);
-    res.json(userWithoutPassword);
+    res.json(response);
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
@@ -158,8 +163,16 @@ app.post('/api/users/auth/register', async (req, res) => {
 // Users - Get all
 app.get('/api/users', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, email, name, role, created_at, verified, applicant_status, docs, date_of_birth, gender, subject, emirate, mobile, emirates_id, job_title, teaching_experience, profile_data FROM users ORDER BY created_at DESC');
-    res.json(result.rows);
+    const result = await pool.query('SELECT * FROM users ORDER BY created_at DESC');
+    
+    // Map users to merge profile_data and exclude password
+    const users = result.rows.map(user => {
+      const { password, ...userWithoutPassword } = user;
+      const profileData = user.profile_data || {};
+      return { ...userWithoutPassword, ...profileData };
+    });
+    
+    res.json(users);
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json({ error: 'Failed to fetch users' });
@@ -170,7 +183,7 @@ app.get('/api/users', async (req, res) => {
 app.get('/api/users/:email', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, email, name, role, created_at, verified, applicant_status, docs, date_of_birth, gender, subject, emirate, mobile, emirates_id, job_title, teaching_experience, profile_data FROM users WHERE LOWER(email) = LOWER($1)',
+      'SELECT * FROM users WHERE LOWER(email) = LOWER($1)',
       [req.params.email]
     );
     
@@ -178,7 +191,14 @@ app.get('/api/users/:email', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     
-    res.json(result.rows[0]);
+    const user = result.rows[0];
+    const { password: _, ...userWithoutPassword } = user;
+    
+    // Merge profile_data into response for frontend compatibility
+    const profileData = user.profile_data || {};
+    const response = { ...userWithoutPassword, ...profileData };
+    
+    res.json(response);
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to fetch user' });
@@ -188,9 +208,14 @@ app.get('/api/users/:email', async (req, res) => {
 // Users - Update profile
 app.put('/api/users/:email', async (req, res) => {
   try {
-    const { name, role, applicant_status, docs, date_of_birth, gender, subject, emirate, mobile, emirates_id, job_title, teaching_experience, profile_data,
-            // Also accept camelCase from frontend
-            dateOfBirth, teachingExperience, emiratesId, applicantStatus, jobTitle, profileData } = req.body;
+    // Extract known fields and store rest in profile_data
+    const { name, role, applicantStatus, applicant_status, docs, interested, ...otherFields } = req.body;
+    
+    // Build profile_data from all the profile fields sent by frontend
+    // This includes: dob, gender, preferredSubject, emirate, contactNumber, 
+    // yearsExperience, currentJob, emiratesIdNumber, otherNotes, etc.
+    const profileFields = { ...otherFields };
+    if (interested !== undefined) profileFields.interested = interested;
     
     const result = await pool.query(
       `UPDATE users 
@@ -198,29 +223,27 @@ app.put('/api/users/:email', async (req, res) => {
            role = COALESCE($3, role),
            applicant_status = COALESCE($4, $5, applicant_status),
            docs = COALESCE($6, docs),
-           date_of_birth = COALESCE($7, $8, date_of_birth),
-           gender = COALESCE($9, gender),
-           subject = COALESCE($10, subject),
-           emirate = COALESCE($11, emirate),
-           mobile = COALESCE($12, mobile),
-           emirates_id = COALESCE($13, $14, emirates_id),
-           job_title = COALESCE($15, $16, job_title),
-           teaching_experience = COALESCE($17, $18, teaching_experience),
-           profile_data = COALESCE($19, $20, profile_data)
+           profile_data = COALESCE(profile_data, '{}'::jsonb) || $7::jsonb
        WHERE LOWER(email) = LOWER($1)
-       RETURNING id, email, name, role, created_at, verified, applicant_status, docs, date_of_birth, gender, subject, emirate, mobile, emirates_id, job_title, teaching_experience, profile_data`,
-      [req.params.email, name, role, applicant_status, applicantStatus, docs, 
-       date_of_birth, dateOfBirth, gender, subject, emirate, mobile, 
-       emirates_id, emiratesId, job_title, jobTitle, teaching_experience, teachingExperience,
-       profile_data ? JSON.stringify(profile_data) : null, profileData ? JSON.stringify(profileData) : null]
+       RETURNING *`,
+      [req.params.email, name, role, applicant_status, applicantStatus, 
+       docs ? JSON.stringify(docs) : null, 
+       JSON.stringify(profileFields)]
     );
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
     
+    const user = result.rows[0];
+    const { password: _, ...userWithoutPassword } = user;
+    
+    // Merge profile_data into response for frontend compatibility
+    const profileData = user.profile_data || {};
+    const response = { ...userWithoutPassword, ...profileData };
+    
     console.log('✅ User profile updated:', req.params.email);
-    res.json(result.rows[0]);
+    res.json(response);
   } catch (error) {
     console.error('Update user error:', error);
     res.status(500).json({ error: 'Failed to update user' });
