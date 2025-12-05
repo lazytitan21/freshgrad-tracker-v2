@@ -15,9 +15,6 @@ export function AuthProvider({ children }){
 
   // Store all users (loaded from server for admin)
   const [users, setUsers] = useState([]);
-  
-  // Track if user profile has been refreshed
-  const [profileRefreshed, setProfileRefreshed] = useState(false);
 
   // Save current user to localStorage (session persistence only)
   useEffect(() => { 
@@ -32,26 +29,39 @@ export function AuthProvider({ children }){
 
   // Refresh user profile from server on app load (to get latest applicantStatus, candidateId, etc.)
   useEffect(() => {
+    let isMounted = true;
+    
     async function refreshUserProfile() {
-      if (user?.email && !profileRefreshed) {
+      if (user?.email) {
         try {
-          console.log('🔄 Refreshing user profile from server...');
+          console.log('🔄 Refreshing user profile from server for:', user.email);
           const freshUserData = await api.get(API_ENDPOINTS.userByEmail(user.email));
-          if (freshUserData) {
-            console.log('✅ Refreshed user profile:', freshUserData.applicantStatus, freshUserData.candidateId);
-            // Create a new user object to ensure React detects the change
-            setUser({ ...freshUserData });
-            setProfileRefreshed(true);
+          if (freshUserData && isMounted) {
+            console.log('✅ Refreshed user profile:', {
+              applicantStatus: freshUserData.applicantStatus,
+              candidateId: freshUserData.candidateId
+            });
+            // Only update if data has changed
+            if (freshUserData.applicantStatus !== user.applicantStatus || 
+                freshUserData.candidateId !== user.candidateId) {
+              console.log('📝 Updating user state with fresh data');
+              setUser(freshUserData);
+            }
           }
         } catch (error) {
           console.log('Could not refresh user profile:', error.message);
-          setProfileRefreshed(true); // Don't retry on error
         }
       }
     }
-    refreshUserProfile();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    
+    // Small delay to ensure component is mounted
+    const timer = setTimeout(refreshUserProfile, 100);
+    
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [user?.email]);
 
   // Register new user via API
   async function register({ name, email, password }){
@@ -90,7 +100,6 @@ export function AuthProvider({ children }){
       
       console.log('✅ Login successful:', userData.email || userData);
       setUser(userData);
-      setProfileRefreshed(true); // Fresh login data, no need to refresh
       return userData;
     } catch (error) {
       console.error('❌ Login failed:', error);
@@ -100,7 +109,6 @@ export function AuthProvider({ children }){
 
   function logout(){ 
     setUser(null); 
-    setProfileRefreshed(false);
     localStorage.removeItem("fg.authUser");
   }
 
