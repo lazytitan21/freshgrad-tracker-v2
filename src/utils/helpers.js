@@ -41,6 +41,23 @@ export function computeFinalAverage(candidate, courses){
   return wsum>0 ? Math.round((sum/wsum)*10)/10 : null;
 }
 
+// Compute current average from all course results (shows progress even if incomplete)
+export function computeCurrentAverage(candidate, courses){
+  if (!candidate) return null;
+  const results = candidate.courseResults || [];
+  if (!results.length) return null;
+  let sum = 0, count = 0;
+  results.forEach(cr => {
+    if (typeof cr.score === "number") {
+      const course = (courses || []).find(c => c.code === cr.code);
+      const weight = course && typeof course.weight === "number" && course.weight > 0 ? course.weight : 1;
+      sum += cr.score * weight;
+      count += weight;
+    }
+  });
+  return count > 0 ? Math.round((sum / count) * 10) / 10 : null;
+}
+
 export function coursePassed(candidate, course){
   const cr = (candidate.courseResults||[]).find(x => x.code===course.code);
   if (!cr) return false;

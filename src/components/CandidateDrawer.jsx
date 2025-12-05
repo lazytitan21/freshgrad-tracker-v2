@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../providers/AuthProvider";
 import { useStore } from "../providers/StoreProvider";
-import { requiredCoursesForTrack, courseByCode, computeFinalAverage, coursePassed, trackNameById } from "../utils/helpers";
+import { requiredCoursesForTrack, courseByCode, computeCurrentAverage, coursePassed, trackNameById, TRACKS } from "../utils/helpers";
 
 function MentorSelect({ intern, onChange }){
   const { mentors } = useStore();
@@ -84,7 +84,7 @@ function CandidateDrawer({ open, onClose, candidate, role, generateCandidatePDF,
   }, [candidate, updateCandidate, logEvent, notify]);
   useEffect(()=>{ try { ensureInternship(); } catch (e) { void e; } }, [ensureInternship]);
 
-  const finalAvg = candidate ? computeFinalAverage(candidate, courses) : null;
+  const currentAvg = candidate ? computeCurrentAverage(candidate, courses) : null;
 
   const [_adminEdit, _setAdminEdit] = useState({ name:"", email:"", emirate:"", subject:"", gpa:0, mobile:"" });
   const [noteText,setNoteText]=useState(""); const [correctionText,setCorrectionText]=useState(""); const [_rejectReason,setRejectReason]=useState("");
@@ -168,17 +168,34 @@ function CandidateDrawer({ open, onClose, candidate, role, generateCandidatePDF,
             </Section>
 
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <Info label="National ID" value={candidate.nationalId} />
-              <Info label="Emirate"     value={candidate.emirate} />
-              <Info label="Subject"     value={candidate.subject} />
-              <Info label="GPA"         value={Number(candidate.gpa).toFixed(2)} />
-              <Info label="Track"       value={trackNameById(candidate.trackId)} />
+              <Info label="National ID" value={candidate.nationalId || "—"} />
+              <Info label="Emirate" value={(
+                <select className="rounded-lg border px-3 py-2 w-48 text-sm" value={candidate.emirate || ""} onChange={e => updateCandidate({ emirate: e.target.value })}>
+                  <option value="">Select emirate…</option>
+                  {["Abu Dhabi","Dubai","Sharjah","Ajman","Umm Al Quwain","Ras Al Khaimah","Fujairah"].map(e => (<option key={e} value={e}>{e}</option>))}
+                </select>
+              )} />
+              <Info label="Subject" value={(
+                <select className="rounded-lg border px-3 py-2 w-48 text-sm" value={candidate.subject || ""} onChange={e => updateCandidate({ subject: e.target.value })}>
+                  <option value="">Select subject…</option>
+                  {["Math","Science","Physics","Chemistry","Biology","Arabic","English","Computer Science","Social Studies","Islamic Studies","Physical Education","Art","Music"].map(s => (<option key={s} value={s}>{s}</option>))}
+                </select>
+              )} />
+              <Info label="GPA" value={(
+                <input type="number" step="0.01" min="0" max="4" className="rounded-lg border px-3 py-2 w-48 text-sm" value={candidate.gpa || ""} onChange={e => updateCandidate({ gpa: parseFloat(e.target.value) || 0 })} placeholder="0.00" />
+              )} />
+              <Info label="Track" value={(
+                <select className="rounded-lg border px-3 py-2 w-48 text-sm" value={candidate.trackId || ""} onChange={e => updateCandidate({ trackId: e.target.value })}>
+                  <option value="">Select track…</option>
+                  {TRACKS.map(t => (<option key={t.id} value={t.id}>{t.name}</option>))}
+                </select>
+              )} />
               <Info label="Status" value={(
                 <select className="rounded-lg border px-3 py-2 w-48 text-sm" value={candidate.status} onChange={e=>changeStatus(e.target.value)}>
                   {["Imported","Eligible","Assigned","In Training","Courses Completed","Assessed","Graduated","Ready for Hiring","Hired/Closed","On Hold","Withdrawn","Rejected"].map(s=><option key={s} value={s}>{s}</option>)}
                 </select>
               )} />
-              <Info label="Final Average" value={finalAvg ?? "—"} />
+              <Info label="Current Average" value={currentAvg !== null ? currentAvg : "—"} />
               <Info label="Sponsor" value={(<select className="rounded-lg border px-3 py-2 w-48 text-sm" value={candidate.sponsor || ""} onChange={e => updateCandidate({ sponsor: e.target.value })}><option value="">Select sponsor…</option>{["MOE","Mawaheb","MBZUH"].map(s => (<option key={s} value={s}>{s}</option>))}</select>)} />
             </div>
 
