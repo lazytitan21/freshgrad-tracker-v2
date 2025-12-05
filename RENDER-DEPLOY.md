@@ -9,7 +9,7 @@
    git init
    git add .
    git commit -m "Ready for Render deployment"
-   git remote add origin https://github.com/YOUR_USERNAME/freshgrad-tracker.git
+   git remote add origin https://github.com/YOUR_USERNAME/freshgrad-tracker-v2.git
    git push -u origin main
    ```
 
@@ -24,18 +24,18 @@
    - Click "Connect"
 
 4. **Configure** (auto-detected from render.yaml):
-   - **Name**: freshgrad-tracker (or your choice)
+   - **Name**: freshgrad-tracker-v2 (or your choice)
    - **Region**: Choose closest (Oregon, Frankfurt, Singapore)
    - **Branch**: main
    - **Build Command**: `npm install` (auto-filled)
-   - **Start Command**: `node server.cjs` (auto-filled)
+   - **Start Command**: `node server-db.cjs` (auto-filled)
    - **Instance Type**: Free
 
 5. **Click "Create Web Service"**
 
 6. **Wait 2-3 minutes** for deployment
 
-7. **Your app will be live at**: `https://freshgrad-tracker.onrender.com`
+7. **Your app will be live at**: `https://freshgrad-tracker-v2.onrender.com`
 
 ---
 
@@ -67,11 +67,11 @@ If you don't want to use GitHub:
 
 ## 📋 Files Ready for Render:
 
-- ✅ `server.cjs` - Main server file
-- ✅ `package.json` - Dependencies (express, cors)
+- ✅ `server-db.cjs` - Main server file (with PostgreSQL)
+- ✅ `package.json` - Dependencies (express, cors, pg)
 - ✅ `render.yaml` - Render configuration
 - ✅ `dist/` - Frontend build
-- ✅ `server/data/` - Data storage folder
+- ✅ `server/src/schema.sql` - Database schema
 
 ---
 

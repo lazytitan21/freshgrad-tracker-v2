@@ -46,7 +46,7 @@ git add .
 git commit -m "Add PostgreSQL database support for persistent storage"
 
 # Add remote (replace with your repo URL)
-git remote add origin https://github.com/lazytitan21/freshgrad-tracker.git
+git remote add origin https://github.com/lazytitan21/freshgrad-tracker-v2.git
 
 # Push to GitHub
 git push -u origin main
@@ -67,8 +67,8 @@ If prompted for password, use **Personal Access Token**:
 1. Go to https://render.com/dashboard
 2. Click **"New +"** → **"PostgreSQL"**
 3. Configure:
-   - **Name**: `freshgrad-tracker-db`
-   - **Database**: `freshgrad_tracker`
+   - **Name**: `freshgrad-tracker-db-v2`
+   - **Database**: `freshgrad_tracker_v2`
    - **Region**: Oregon (or closest to you)
    - **Plan**: **Free**
 4. Click **"Create Database"**
@@ -81,11 +81,11 @@ If prompted for password, use **Personal Access Token**:
 
 1. In Render dashboard, click **"New +"** → **"Web Service"**
 2. Click **"Connect GitHub"** (authorize if first time)
-3. Find and select `freshgrad-tracker` repository
+3. Find and select `freshgrad-tracker-v2` repository
 4. Click **"Connect"**
 
 **Configuration** (should auto-fill from render.yaml):
-- **Name**: `freshgrad-tracker` (or your choice)
+- **Name**: `freshgrad-tracker-v2` (or your choice)
 - **Region**: Same as database (Oregon)
 - **Branch**: `main`
 - **Build Command**: `npm install`

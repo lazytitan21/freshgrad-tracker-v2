@@ -94,6 +94,7 @@
 │                                                                              │
 │  Then on Render.com:                                                        │
 │    1. Create PostgreSQL database (free tier)                                │
+│       - Name: freshgrad-tracker-db-v2                                       │
 │    2. Create Web Service from GitHub                                        │
 │    3. Link DATABASE_URL from database                                       │
 │    4. Deploy!                                                               │

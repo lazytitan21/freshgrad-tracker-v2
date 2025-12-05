@@ -17,12 +17,12 @@ bash deploy-to-github.sh
 
 ### 2. Create Database on Render
 - Go to https://render.com → New + → PostgreSQL
-- Name: `freshgrad-tracker-db`, Plan: Free
+- Name: `freshgrad-tracker-db-v2`, Plan: Free
 - Wait for "Available" status
 
-### 3. Deploy Web Service
+### Deploy Web Service
 - New + → Web Service → Connect GitHub
-- Select `freshgrad-tracker` repo
+- Select `freshgrad-tracker-v2` repo
 - Add `DATABASE_URL` from database
 - Deploy!
 
@@ -317,5 +317,5 @@ Your FreshGrad Tracker is now production-ready with persistent data storage!
 ---
 
 **Maintained by**: Firas Kiftaro
-**Repository**: https://github.com/lazytitan21/freshgrad-tracker
+**Repository**: https://github.com/lazytitan21/freshgrad-tracker-v2
 **Platform**: Render.com (Free Tier)

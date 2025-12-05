@@ -137,14 +137,14 @@ services:
 **After:**
 ```yaml
 databases:
-  - name: freshgrad-tracker-db
-    databaseName: freshgrad_tracker
-    user: freshgrad_user
+  - name: freshgrad-tracker-db-v2
+    databaseName: freshgrad_tracker_v2
+    user: freshgrad_user_v2
     plan: free
 
 services:
   - type: web
-    name: freshgrad-tracker
+    name: freshgrad-tracker-v2
     buildCommand: npm install
     startCommand: node server-db.cjs
     healthCheckPath: /health
@@ -153,7 +153,7 @@ services:
         value: production
       - key: DATABASE_URL
         fromDatabase:
-          name: freshgrad-tracker-db
+          name: freshgrad-tracker-db-v2
           property: connectionString
 ```
 

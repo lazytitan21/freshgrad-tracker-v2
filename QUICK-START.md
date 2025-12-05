@@ -28,7 +28,7 @@ git add .
 git commit -m "Add PostgreSQL database support"
 
 # Add your GitHub repository
-git remote add origin https://github.com/lazytitan21/freshgrad-tracker.git
+git remote add origin https://github.com/lazytitan21/freshgrad-tracker-v2.git
 
 # Push to GitHub
 git push -u origin main
@@ -46,13 +46,13 @@ git push -u origin main
 ### Create Database (Do This First!)
 1. Go to: https://render.com/dashboard
 2. New + → PostgreSQL
-3. Name: `freshgrad-tracker-db`
+3. Name: `freshgrad-tracker-db-v2`
 4. Free tier → Create
 5. Wait 2-3 min until "Available"
 
 ### Create Web Service
 1. New + → Web Service
-2. Connect GitHub → Select `freshgrad-tracker`
+2. Connect GitHub → Select `freshgrad-tracker-v2`
 3. Auto-configured from render.yaml
 4. **IMPORTANT**: Add environment variable:
    - `DATABASE_URL` = Copy from database "Internal Database URL"
@@ -76,7 +76,7 @@ Login: `firas.kiftaro@moe.gov.ae` / `1234`
 git remote -v
 
 # Fix remote URL
-git remote set-url origin https://github.com/lazytitan21/freshgrad-tracker.git
+git remote set-url origin https://github.com/lazytitan21/freshgrad-tracker-v2.git
 
 # Try push again
 git push -u origin main

@@ -52,7 +52,7 @@ if [ -z "$REMOTE" ]; then
     echo "⚠️  No remote repository configured"
     echo ""
     echo "Please enter your GitHub repository URL:"
-    echo "Example: https://github.com/lazytitan21/freshgrad-tracker.git"
+    echo "Example: https://github.com/lazytitan21/freshgrad-tracker-v2.git"
     read -p "Repository URL: " REPO_URL
     
     if [ -z "$REPO_URL" ]; then
@@ -87,11 +87,11 @@ if git push -u origin "$BRANCH"; then
     echo ""
     echo "1. Go to Render.com: https://render.com"
     echo "2. Create PostgreSQL Database first"
-    echo "   - Name: freshgrad-tracker-db"
+    echo "   - Name: freshgrad-tracker-db-v2"
     echo "   - Free tier"
     echo ""
     echo "3. Create Web Service"
-    echo "   - Connect GitHub repository"
+    echo "   - Connect GitHub repository: freshgrad-tracker-v2"
     echo "   - Auto-detected from render.yaml"
     echo ""
     echo "4. Link DATABASE_URL environment variable"

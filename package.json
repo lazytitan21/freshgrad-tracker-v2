@@ -1,5 +1,5 @@
 {
-  "name": "freshgrad-tracker",
+  "name": "freshgrad-tracker-v2",
   "version": "1.0.0",
   "description": "FreshGrad Tracker - Student Journey Management",
   "main": "server-db.cjs",

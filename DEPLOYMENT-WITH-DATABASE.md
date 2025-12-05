@@ -76,10 +76,10 @@ git status
 
 ```bash
 # Add your GitHub repository (replace with your actual repo URL)
-git remote add origin https://github.com/lazytitan21/freshgrad-tracker.git
+git remote add origin https://github.com/lazytitan21/freshgrad-tracker-v2.git
 
 # If remote already exists, update it:
-git remote set-url origin https://github.com/lazytitan21/freshgrad-tracker.git
+git remote set-url origin https://github.com/lazytitan21/freshgrad-tracker-v2.git
 
 # Push to main branch
 git push -u origin main
@@ -109,9 +109,9 @@ git push -u origin main
 
 1. Click **"New +"** → **"PostgreSQL"**
 2. Configure:
-   - **Name**: `freshgrad-tracker-db`
-   - **Database**: `freshgrad_tracker`
-   - **User**: `freshgrad_user` (or leave default)
+   - **Name**: `freshgrad-tracker-db-v2`
+   - **Database**: `freshgrad_tracker_v2`
+   - **User**: `freshgrad_user_v2` (or leave default)
    - **Region**: Choose closest (Oregon, Frankfurt, Singapore)
    - **Instance Type**: **Free**
 3. Click **"Create Database"**
@@ -122,14 +122,14 @@ git push -u origin main
 
 1. Click **"New +"** → **"Web Service"**
 2. Click **"Connect GitHub"** and authorize Render
-3. Select your repository: `freshgrad-tracker`
+3. Select your repository: `freshgrad-tracker-v2`
 4. Click **"Connect"**
 
 #### **5.4: Configure Web Service**
 
 Render should auto-detect settings from `render.yaml`, but verify:
 
-- **Name**: `freshgrad-tracker`
+- **Name**: `freshgrad-tracker-v2`
 - **Region**: Same as your database (e.g., Oregon)
 - **Branch**: `main`
 - **Build Command**: `npm install`
@@ -194,7 +194,7 @@ If `render.yaml` doesn't work, manually configure:
 
 ### **Create Database:**
 - New → PostgreSQL
-- Name: `freshgrad-tracker-db`
+- Name: `freshgrad-tracker-db-v2`
 - Free tier
 - Note the internal connection string
 
@@ -311,8 +311,8 @@ If you encounter issues:
 
 | Item | Value |
 |------|-------|
-| **App URL** | `https://your-app-name.onrender.com` |
-| **GitHub Repo** | `https://github.com/lazytitan21/freshgrad-tracker` |
+| **App URL** | `https://freshgrad-tracker-v2.onrender.com` |
+| **GitHub Repo** | `https://github.com/lazytitan21/freshgrad-tracker-v2` |
 | **Database** | PostgreSQL (Free - 256 MB) |
 | **Web Service** | Node.js (Free - spins down after 15 min) |
 | **Default Admin** | `firas.kiftaro@moe.gov.ae` / `1234` |
