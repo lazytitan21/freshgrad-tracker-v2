@@ -133,11 +133,13 @@ app.get('/health', async (req, res) => {
 
 // Hero images endpoint (for landing page)
 app.get('/api/heros', (req, res) => {
-  // Return default hero images
+  // Return hero image paths matching actual files in public/Heros
   res.json([
-    { id: 1, src: '/Heros/hero1.jpg', alt: 'Students learning' },
-    { id: 2, src: '/Heros/hero2.jpg', alt: 'Classroom scene' },
-    { id: 3, src: '/Heros/hero3.jpg', alt: 'Graduation' }
+    "/Heros/hero.JPG",
+    "/Heros/Hero2.JPG",
+    "/Heros/Hero3.JPG",
+    "/Heros/Hero4.JPG",
+    "/Heros/Hero5.JPG"
   ]);
 });
 
