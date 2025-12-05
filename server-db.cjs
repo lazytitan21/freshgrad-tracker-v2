@@ -84,7 +84,18 @@ async function initDatabase() {
         
         // Mentors table migrations
         "ALTER TABLE mentors ADD COLUMN IF NOT EXISTS mentor_data JSONB DEFAULT '{}'::jsonb",
-        'ALTER TABLE mentors ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
+        'ALTER TABLE mentors ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
+        
+        // News/Updates table - create if not exists
+        `CREATE TABLE IF NOT EXISTS news (
+          id VARCHAR(100) PRIMARY KEY,
+          title VARCHAR(500) NOT NULL,
+          body TEXT,
+          category VARCHAR(100) DEFAULT 'general',
+          author_email VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`
       ];
       
       for (const migration of migrations) {
@@ -107,7 +118,7 @@ async function initDatabase() {
 // ========== API ROUTES ==========
 
 // App version - update this to track deployments
-const APP_VERSION = '2.8.0';
+const APP_VERSION = '2.9.0';
 
 // Health check
 app.get('/health', async (req, res) => {
@@ -141,6 +152,78 @@ app.get('/api/heros', (req, res) => {
     "/Heros/Hero4.JPG",
     "/Heros/Hero5.JPG"
   ]);
+});
+
+// ========== NEWS/UPDATES ROUTES ==========
+
+// Get all news
+app.get('/api/news', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM news ORDER BY created_at DESC');
+    res.json(result.rows.map(n => ({
+      id: n.id,
+      title: n.title,
+      body: n.body,
+      category: n.category || 'general',
+      ts: n.created_at,
+      authorEmail: n.author_email
+    })));
+  } catch (error) {
+    console.error('Error fetching news:', error);
+    res.json([]); // Return empty array on error
+  }
+});
+
+// Create news
+app.post('/api/news', async (req, res) => {
+  try {
+    const { id, title, body, category, authorEmail } = req.body;
+    const newsId = id || `NEWS-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+    
+    await pool.query(
+      `INSERT INTO news (id, title, body, category, author_email, created_at, updated_at) 
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      [newsId, title, body, category || 'general', authorEmail]
+    );
+    
+    console.log('✅ News created:', newsId);
+    res.json({ id: newsId, title, body, category: category || 'general', ts: new Date().toISOString(), authorEmail });
+  } catch (error) {
+    console.error('Error creating news:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update news
+app.put('/api/news/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, body, category } = req.body;
+    
+    await pool.query(
+      `UPDATE news SET title = $1, body = $2, category = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4`,
+      [title, body, category || 'general', id]
+    );
+    
+    console.log('✅ News updated:', id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating news:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete news
+app.delete('/api/news/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('DELETE FROM news WHERE id = $1', [id]);
+    console.log('✅ News deleted:', id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting news:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Debug endpoint - check table columns

@@ -2291,37 +2291,35 @@ function HiringTrackerPage(){
   );
 }
 // ------------------------------ Settings ------------------------------
+const NEWS_CATEGORIES = ['General', 'Training', 'MOE', 'Announcements', 'Events', 'Hiring'];
+
 function SettingsPage(){
   const { user } = useAuth();
   const isAdmin = user?.role === "Admin";
-  const { publicNews, setPublicNews } = useStore();
+  const { publicNews, addNews, updateNews, deleteNews } = useStore();
 
   // local inputs for new post
   const [title, setTitle] = React.useState("");
   const [body, setBody]   = React.useState("");
+  const [category, setCategory] = React.useState("General");
   const [editingId, setEditingId] = React.useState("");
 
-  function addUpdate(){
+  async function addUpdate(){
     if (!isAdmin) return;
     const t = title.trim(), b = body.trim();
     if (!t || !b) { alert("Title and body are required."); return; }
     if (editingId) {
-      updateUpdate(editingId, { title: t, body: b });
+      await updateNews(editingId, { title: t, body: b, category });
       setEditingId("");
     } else {
-      const item = { id:`NEWS-${Date.now()}`, ts:new Date().toISOString(), title:t, body:b };
-      setPublicNews(prev => [item, ...prev]);
+      await addNews({ title: t, body: b, category, authorEmail: user?.email });
     }
-    setTitle(""); setBody("");
+    setTitle(""); setBody(""); setCategory("General");
   }
-  function removeUpdate(id){
+  async function removeUpdate(id){
     if (!isAdmin) return;
     if (!window.confirm("Delete this update?")) return;
-    setPublicNews(prev => prev.filter(n => n.id !== id));
-  }
-  function updateUpdate(id, patch){
-    if (!isAdmin) return;
-    setPublicNews(prev => prev.map(n => n.id===id ? { ...n, ...patch } : n));
+    await deleteNews(id);
   }
 
   return (
@@ -2345,20 +2343,23 @@ function SettingsPage(){
         <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Editor column */}
           <div className="lg:col-span-1">
-            <div className="text-sm text-slate-600 mb-2">Create a new update</div>
+            <div className="text-sm text-slate-600 mb-2">{editingId ? 'Edit update' : 'Create a new update'}</div>
             <input className="w-full rounded-xl border px-3 py-2 mb-2" placeholder="Title"
                    value={title} onChange={e=>setTitle(e.target.value)} />
             <textarea className="w-full rounded-xl border px-3 py-2 mb-2 h-28 resize-none" placeholder="Body"
                    value={body} onChange={e=>setBody(e.target.value)} />
+            <select className="w-full rounded-xl border px-3 py-2 mb-2" value={category} onChange={e=>setCategory(e.target.value)}>
+              {NEWS_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+            </select>
             <div className="flex gap-2">
               <button onClick={addUpdate} className="rounded-xl bg-indigo-600 text-white px-4 py-2">
-                Publish
+                {editingId ? 'Save Changes' : 'Publish'}
               </button>
-              <button onClick={()=>{ setTitle(''); setBody(''); }} className="rounded-xl border px-4 py-2">
-                Clear
+              <button onClick={()=>{ setTitle(''); setBody(''); setCategory('General'); setEditingId(''); }} className="rounded-xl border px-4 py-2">
+                {editingId ? 'Cancel' : 'Clear'}
               </button>
             </div>
-            <div className="text-[11px] text-slate-400 mt-3">(Prototype) Updates are stored locally in this browser via localStorage.</div>
+            <div className="text-[11px] text-slate-400 mt-3">Updates are saved to the database and visible to all users.</div>
           </div>
 
           {/* Preview + list column */}
@@ -2367,7 +2368,7 @@ function SettingsPage(){
             <div className="rounded-xl panel border p-4">
               {title ? <div className="text-lg font-semibold">{title}</div> : <div className="text-lg text-slate-400">Title preview</div>}
               <div className="text-sm text-slate-600 mt-2">{body || <span className="text-slate-400">Body preview</span>}</div>
-              <div className="text-xs text-slate-400 mt-3">{new Date().toLocaleString()}</div>
+              <div className="text-xs text-slate-400 mt-3">{new Date().toLocaleString()} — <span className="text-indigo-600">{category}</span></div>
             </div>
 
             <div className="grid gap-3">
@@ -2375,13 +2376,16 @@ function SettingsPage(){
               {publicNews.map(n => (
                 <div key={n.id} className="rounded-xl border panel p-3 flex items-start justify-between">
                   <div>
-                    <div className="text-sm font-semibold">{n.title}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-semibold">{n.title}</div>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{n.category || 'General'}</span>
+                    </div>
                     <div className="text-sm text-slate-600 mt-1">{n.body}</div>
                     <div className="text-xs text-slate-400 mt-2">{new Date(n.ts).toLocaleString()}</div>
                   </div>
                   {isAdmin && (
                     <div className="flex flex-col gap-2">
-                      <button className="rounded-lg border px-3 py-1 text-sm" onClick={()=>{ setEditingId(n.id); setTitle(n.title); setBody(n.body); }}>
+                      <button className="rounded-lg border px-3 py-1 text-sm" onClick={()=>{ setEditingId(n.id); setTitle(n.title); setBody(n.body); setCategory(n.category || 'General'); }}>
                         Edit
                       </button>
                       <button className="rounded-lg border px-3 py-1 text-sm text-rose-700" onClick={()=>removeUpdate(n.id)}>Delete</button>
@@ -2417,19 +2421,19 @@ export default function App(){
 /* ------------------------------ Public Landing + Auth (Student) ------------------------------ */
 function LandingPage({ onSignIn, onSignUp }){
   const { user } = useAuth();
-  const { publicNews, setPublicNews } = useStore();
+  const { publicNews, addNews } = useStore();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [category, setCategory] = useState("General");
   const [manageOpen, setManageOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [updatesFilter, setUpdatesFilter] = useState('all');
 
-  function addUpdate(){
+  async function addUpdate(){
     const t = title.trim(), b = body.trim();
     if (!t || !b) { alert("Please fill a title and body."); return; }
-    const item = { id:`NEWS-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, ts:new Date().toISOString(), title:t, body:b };
-    setPublicNews(prev => [item, ...prev]);
-    setTitle(""); setBody("");
+    await addNews({ title: t, body: b, category, authorEmail: user?.email });
+    setTitle(""); setBody(""); setCategory("General");
     setManageOpen(false);
   }
 
@@ -2617,12 +2621,16 @@ function LandingPage({ onSignIn, onSignUp }){
                           </div>
                           <div className="text-xs text-slate-500">{news.length} total</div>
                         </div>
-                        <div className="flex items-center gap-3 mb-3">
+                        <div className="flex items-center gap-3 mb-3 flex-wrap">
                           <div className="text-sm text-slate-500">Filter:</div>
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 flex-wrap">
                             <button onClick={()=>setUpdatesFilter('all')} className={classNames('text-xs px-2 py-1 rounded', updatesFilter==='all'?'bg-indigo-600 text-white':'border text-slate-600')}>All</button>
+                            <button onClick={()=>setUpdatesFilter('general')} className={classNames('text-xs px-2 py-1 rounded', updatesFilter==='general'?'bg-indigo-600 text-white':'border text-slate-600')}>General</button>
                             <button onClick={()=>setUpdatesFilter('training')} className={classNames('text-xs px-2 py-1 rounded', updatesFilter==='training'?'bg-indigo-600 text-white':'border text-slate-600')}>Training</button>
                             <button onClick={()=>setUpdatesFilter('moe')} className={classNames('text-xs px-2 py-1 rounded', updatesFilter==='moe'?'bg-indigo-600 text-white':'border text-slate-600')}>MOE</button>
+                            <button onClick={()=>setUpdatesFilter('announcements')} className={classNames('text-xs px-2 py-1 rounded', updatesFilter==='announcements'?'bg-indigo-600 text-white':'border text-slate-600')}>Announcements</button>
+                            <button onClick={()=>setUpdatesFilter('events')} className={classNames('text-xs px-2 py-1 rounded', updatesFilter==='events'?'bg-indigo-600 text-white':'border text-slate-600')}>Events</button>
+                            <button onClick={()=>setUpdatesFilter('hiring')} className={classNames('text-xs px-2 py-1 rounded', updatesFilter==='hiring'?'bg-indigo-600 text-white':'border text-slate-600')}>Hiring</button>
                           </div>
                         </div>
 
@@ -2630,9 +2638,12 @@ function LandingPage({ onSignIn, onSignUp }){
                           {visibleNews.length === 0 && <div className="text-slate-500">No updates yet.</div>}
                           {visibleNews.map(n => (
                             <div key={n.id} className="rounded-lg border p-3 bg-white">
-                              <div className="font-medium text-sm mb-1">{n.title}</div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <div className="font-medium text-sm">{n.title}</div>
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{n.category || 'General'}</span>
+                              </div>
                               <div className="text-slate-600 text-sm mb-2">{n.body}</div>
-                              <div className="text-xs text-slate-400">{new Date(n.ts).toLocaleDateString()} — <span className="text-slate-500 text-[11px]">{n.category || 'General'}</span></div>
+                              <div className="text-xs text-slate-400">{new Date(n.ts).toLocaleDateString()}</div>
                             </div>
                           ))}
                         </div>
@@ -2648,14 +2659,16 @@ function LandingPage({ onSignIn, onSignUp }){
                         {user?.role === "Admin" && (
                           <div className="mt-4">
                             <button onClick={()=>setManageOpen(o=>!o)} className="text-xs text-slate-500 underline">
-                              {manageOpen ? "Hide manage updates" : "Post an update (local)"}
+                              {manageOpen ? "Hide post form" : "Post an update"}
                             </button>
                             {manageOpen && (
-                              <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                              <div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-3">
                                 <input className="rounded-xl border px-3 py-2" placeholder="Title" value={title} onChange={e=>setTitle(e.target.value)} />
                                 <input className="md:col-span-2 rounded-xl border px-3 py-2" placeholder="Body" value={body} onChange={e=>setBody(e.target.value)} />
-                                <button onClick={addUpdate} className="md:col-span-3 rounded-xl bg-slate-900 text-white px-4 py-2">Publish</button>
-                                <div className="md:col-span-3 text-[11px] text-slate-400">Updates are visible to all visitors and saved to this browser only.</div>
+                                <select className="rounded-xl border px-3 py-2" value={category} onChange={e=>setCategory(e.target.value)}>
+                                  {NEWS_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                </select>
+                                <button onClick={addUpdate} className="md:col-span-4 rounded-xl bg-slate-900 text-white px-4 py-2">Publish</button>
                               </div>
                             )}
                           </div>

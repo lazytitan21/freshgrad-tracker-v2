@@ -272,6 +272,70 @@ export function StoreProvider({ children }) {
     }
   }
 
+  // ========== NEWS/UPDATES API ==========
+  async function fetchNews() {
+    try {
+      const response = await fetch('/api/news');
+      if (response.ok) {
+        const data = await response.json();
+        setPublicNews(data || []);
+        console.log('✅ Loaded news from server:', data?.length || 0);
+      }
+    } catch (error) {
+      console.error('❌ Failed to load news:', error);
+      setPublicNews([]);
+    }
+  }
+
+  async function addNews(newsItem) {
+    try {
+      const response = await fetch('/api/news', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newsItem)
+      });
+      if (response.ok) {
+        const created = await response.json();
+        setPublicNews(prev => [created, ...prev]);
+        console.log('✅ Added news');
+        return created;
+      }
+    } catch (error) {
+      console.error('❌ Failed to add news:', error);
+      throw error;
+    }
+  }
+
+  async function updateNews(id, patch) {
+    try {
+      const response = await fetch(`/api/news/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch)
+      });
+      if (response.ok) {
+        setPublicNews(prev => prev.map(n => n.id === id ? { ...n, ...patch } : n));
+        console.log('✅ Updated news');
+      }
+    } catch (error) {
+      console.error('❌ Failed to update news:', error);
+      throw error;
+    }
+  }
+
+  async function deleteNews(id) {
+    try {
+      const response = await fetch(`/api/news/${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        setPublicNews(prev => prev.filter(n => n.id !== id));
+        console.log('✅ Deleted news');
+      }
+    } catch (error) {
+      console.error('❌ Failed to delete news:', error);
+      throw error;
+    }
+  }
+
   // ========== BULK SYNC FUNCTIONS ==========
   async function bulkAddCandidates(candidatesList) {
     try {
@@ -310,6 +374,7 @@ export function StoreProvider({ children }) {
     fetchCandidates();
     fetchCourses();
     fetchMentors();
+    fetchNews();
   }, []);
 
   return (
@@ -364,7 +429,13 @@ export function StoreProvider({ children }) {
       setCorrections, 
       setAudit, 
       setUserName, 
-      setPublicNews
+      setPublicNews,
+      
+      // News API
+      fetchNews,
+      addNews,
+      updateNews,
+      deleteNews
     }}>
       {children}
     </StoreContext.Provider>
