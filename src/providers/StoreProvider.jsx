@@ -266,6 +266,39 @@ export function StoreProvider({ children }) {
     }
   }
 
+  // ========== BULK SYNC FUNCTIONS ==========
+  async function bulkAddCandidates(candidatesList) {
+    try {
+      const response = await api.post(`${API_ENDPOINTS.candidates}/bulk`, { candidates: candidatesList });
+      setCandidates(prev => [...prev, ...response]);
+      console.log('✅ Bulk added candidates:', response.length);
+      return response;
+    } catch (error) {
+      console.error('❌ Failed to bulk add candidates:', error);
+      // Fallback to local state only
+      setCandidates(prev => [...prev, ...candidatesList]);
+      return candidatesList;
+    }
+  }
+
+  async function bulkUpdateCandidates(candidatesList) {
+    try {
+      // Update each candidate via API
+      const updated = await Promise.all(
+        candidatesList.map(c => api.put(API_ENDPOINTS.candidateById(c.id), c).catch(() => c))
+      );
+      setCandidates(prev => {
+        const byId = new Map(updated.map(c => [c.id, c]));
+        return prev.map(c => byId.get(c.id) || c);
+      });
+      console.log('✅ Bulk updated candidates');
+      return updated;
+    } catch (error) {
+      console.error('❌ Failed to bulk update candidates:', error);
+      throw error;
+    }
+  }
+
   // ========== LOAD DATA ON MOUNT ==========
   useEffect(() => {
     fetchCandidates();
@@ -293,6 +326,8 @@ export function StoreProvider({ children }) {
       deleteCandidate,
       setCandidates, // For direct state updates (use updateCandidate for persistence)
       syncCandidate, // Sync single candidate to server
+      bulkAddCandidates, // Add multiple candidates at once
+      bulkUpdateCandidates, // Update multiple candidates at once
       
       // Courses
       fetchCourses,

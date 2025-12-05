@@ -49,6 +49,7 @@ async function initDatabase() {
       
       // Add new columns if they don't exist (migration for existing databases)
       const migrations = [
+        // Users table migrations
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_birth DATE',
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(20)',
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS subject VARCHAR(100)',
@@ -57,7 +58,25 @@ async function initDatabase() {
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS emirates_id VARCHAR(50)',
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title VARCHAR(255)',
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS teaching_experience INTEGER',
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_data JSONB DEFAULT '{}'::jsonb"
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_data JSONB DEFAULT '{}'::jsonb",
+        
+        // Courses table migrations
+        "ALTER TABLE courses ADD COLUMN IF NOT EXISTS course_data JSONB DEFAULT '{}'::jsonb",
+        'ALTER TABLE courses ADD COLUMN IF NOT EXISTS modality VARCHAR(100)',
+        'ALTER TABLE courses ADD COLUMN IF NOT EXISTS hours INTEGER',
+        'ALTER TABLE courses ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true',
+        
+        // Candidates table migrations
+        "ALTER TABLE candidates ADD COLUMN IF NOT EXISTS candidate_data JSONB DEFAULT '{}'::jsonb",
+        "ALTER TABLE candidates ADD COLUMN IF NOT EXISTS enrollments JSONB DEFAULT '[]'::jsonb",
+        "ALTER TABLE candidates ADD COLUMN IF NOT EXISTS hiring JSONB DEFAULT '{}'::jsonb",
+        'ALTER TABLE candidates ADD COLUMN IF NOT EXISTS national_id VARCHAR(100)',
+        'ALTER TABLE candidates ADD COLUMN IF NOT EXISTS source_batch VARCHAR(255)',
+        'ALTER TABLE candidates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
+        
+        // Mentors table migrations
+        "ALTER TABLE mentors ADD COLUMN IF NOT EXISTS mentor_data JSONB DEFAULT '{}'::jsonb",
+        'ALTER TABLE mentors ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
       ];
       
       for (const migration of migrations) {
@@ -298,7 +317,13 @@ app.delete('/api/users/:email', async (req, res) => {
 app.get('/api/candidates', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM candidates ORDER BY created_at DESC');
-    res.json(result.rows);
+    // Merge candidate_data into each candidate for frontend compatibility
+    const candidates = result.rows.map(candidate => {
+      const candidateData = candidate.candidate_data || {};
+      const { candidate_data, ...rest } = candidate;
+      return { ...rest, ...candidateData };
+    });
+    res.json(candidates);
   } catch (error) {
     console.error('Get candidates error:', error);
     res.status(500).json({ error: 'Failed to fetch candidates' });
@@ -312,43 +337,114 @@ app.get('/api/candidates/:id', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Candidate not found' });
     }
-    res.json(result.rows[0]);
+    const candidate = result.rows[0];
+    const candidateData = candidate.candidate_data || {};
+    const { candidate_data, ...rest } = candidate;
+    res.json({ ...rest, ...candidateData });
   } catch (error) {
     console.error('Get candidate error:', error);
     res.status(500).json({ error: 'Failed to fetch candidate' });
   }
 });
 
-// Candidates - Create
+// Candidates - Create or Update (Upsert)
 app.post('/api/candidates', async (req, res) => {
   try {
-    const { name, email, mobile, subject, emirate, gpa, status, sponsor, track_id, assignments, corrections, notes } = req.body;
-    const id = `C-${Date.now()}`;
+    const { id, name, email, mobile, subject, emirate, gpa, status, sponsor, track_id, trackId, 
+            nationalId, national_id, sourceBatch, source_batch, enrollments, hiring, ...otherFields } = req.body;
+    const candidateId = id || `C-${Date.now()}`;
     
     const result = await pool.query(
-      `INSERT INTO candidates (id, name, email, mobile, subject, emirate, gpa, status, sponsor, track_id, assignments, corrections, notes, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+      `INSERT INTO candidates (id, name, email, mobile, subject, emirate, gpa, status, sponsor, track_id, national_id, source_batch, enrollments, hiring, candidate_data, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         name = COALESCE(EXCLUDED.name, candidates.name),
+         email = COALESCE(EXCLUDED.email, candidates.email),
+         mobile = COALESCE(EXCLUDED.mobile, candidates.mobile),
+         subject = COALESCE(EXCLUDED.subject, candidates.subject),
+         emirate = COALESCE(EXCLUDED.emirate, candidates.emirate),
+         gpa = COALESCE(EXCLUDED.gpa, candidates.gpa),
+         status = COALESCE(EXCLUDED.status, candidates.status),
+         sponsor = COALESCE(EXCLUDED.sponsor, candidates.sponsor),
+         track_id = COALESCE(EXCLUDED.track_id, candidates.track_id),
+         national_id = COALESCE(EXCLUDED.national_id, candidates.national_id),
+         source_batch = COALESCE(EXCLUDED.source_batch, candidates.source_batch),
+         enrollments = COALESCE(EXCLUDED.enrollments, candidates.enrollments),
+         hiring = COALESCE(EXCLUDED.hiring, candidates.hiring),
+         candidate_data = COALESCE(candidates.candidate_data, '{}'::jsonb) || EXCLUDED.candidate_data,
+         updated_at = NOW()
        RETURNING *`,
-      [id, name, email, mobile, subject, emirate, gpa, status || 'Imported', sponsor, track_id, 
-       JSON.stringify(assignments || []), JSON.stringify(corrections || []), notes]
+      [candidateId, name, email, mobile, subject, emirate, gpa, status || 'Imported', sponsor, 
+       track_id || trackId, national_id || nationalId, source_batch || sourceBatch,
+       JSON.stringify(enrollments || []), JSON.stringify(hiring || {}), JSON.stringify(otherFields)]
     );
     
-    console.log('✅ Candidate created:', result.rows[0].id);
-    res.status(201).json(result.rows[0]);
+    const candidate = result.rows[0];
+    const candidateData = candidate.candidate_data || {};
+    const { candidate_data, ...rest } = candidate;
+    
+    console.log('✅ Candidate created/updated:', candidate.id);
+    res.status(201).json({ ...rest, ...candidateData });
   } catch (error) {
     console.error('Create candidate error:', error);
-    if (error.code === '23505') { // Unique violation
-      res.status(409).json({ error: 'Email already exists' });
-    } else {
-      res.status(500).json({ error: 'Failed to create candidate' });
+    res.status(500).json({ error: 'Failed to create candidate' });
+  }
+});
+
+// Candidates - Bulk Create/Update
+app.post('/api/candidates/bulk', async (req, res) => {
+  try {
+    const { candidates: candidatesList } = req.body;
+    if (!Array.isArray(candidatesList)) {
+      return res.status(400).json({ error: 'Expected array of candidates' });
     }
+    
+    const results = [];
+    for (const candidate of candidatesList) {
+      const { id, name, email, mobile, subject, emirate, gpa, status, sponsor, track_id, trackId,
+              nationalId, national_id, sourceBatch, source_batch, enrollments, hiring, ...otherFields } = candidate;
+      const candidateId = id || `C-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+      
+      const result = await pool.query(
+        `INSERT INTO candidates (id, name, email, mobile, subject, emirate, gpa, status, sponsor, track_id, national_id, source_batch, enrollments, hiring, candidate_data, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           name = COALESCE(EXCLUDED.name, candidates.name),
+           email = COALESCE(EXCLUDED.email, candidates.email),
+           mobile = COALESCE(EXCLUDED.mobile, candidates.mobile),
+           subject = COALESCE(EXCLUDED.subject, candidates.subject),
+           emirate = COALESCE(EXCLUDED.emirate, candidates.emirate),
+           gpa = COALESCE(EXCLUDED.gpa, candidates.gpa),
+           status = COALESCE(EXCLUDED.status, candidates.status),
+           sponsor = COALESCE(EXCLUDED.sponsor, candidates.sponsor),
+           track_id = COALESCE(EXCLUDED.track_id, candidates.track_id),
+           national_id = COALESCE(EXCLUDED.national_id, candidates.national_id),
+           source_batch = COALESCE(EXCLUDED.source_batch, candidates.source_batch),
+           enrollments = COALESCE(EXCLUDED.enrollments, candidates.enrollments),
+           hiring = COALESCE(EXCLUDED.hiring, candidates.hiring),
+           candidate_data = COALESCE(candidates.candidate_data, '{}'::jsonb) || EXCLUDED.candidate_data,
+           updated_at = NOW()
+         RETURNING *`,
+        [candidateId, name, email, mobile, subject, emirate, gpa, status || 'Imported', sponsor,
+         track_id || trackId, national_id || nationalId, source_batch || sourceBatch,
+         JSON.stringify(enrollments || []), JSON.stringify(hiring || {}), JSON.stringify(otherFields)]
+      );
+      results.push(result.rows[0]);
+    }
+    
+    console.log('✅ Bulk candidates created/updated:', results.length);
+    res.status(201).json(results);
+  } catch (error) {
+    console.error('Bulk create candidates error:', error);
+    res.status(500).json({ error: 'Failed to bulk create candidates' });
   }
 });
 
 // Candidates - Update
 app.put('/api/candidates/:id', async (req, res) => {
   try {
-    const { name, email, mobile, subject, emirate, gpa, status, sponsor, track_id, assignments, corrections, notes } = req.body;
+    const { name, email, mobile, subject, emirate, gpa, status, sponsor, track_id, trackId,
+            nationalId, national_id, sourceBatch, source_batch, enrollments, hiring, ...otherFields } = req.body;
     
     const result = await pool.query(
       `UPDATE candidates 
@@ -361,24 +457,30 @@ app.put('/api/candidates/:id', async (req, res) => {
            status = COALESCE($8, status),
            sponsor = COALESCE($9, sponsor),
            track_id = COALESCE($10, track_id),
-           assignments = COALESCE($11, assignments),
-           corrections = COALESCE($12, corrections),
-           notes = COALESCE($13, notes),
+           national_id = COALESCE($11, national_id),
+           source_batch = COALESCE($12, source_batch),
+           enrollments = COALESCE($13, enrollments),
+           hiring = COALESCE($14, hiring),
+           candidate_data = COALESCE(candidate_data, '{}'::jsonb) || $15::jsonb,
            updated_at = NOW()
        WHERE id = $1
        RETURNING *`,
-      [req.params.id, name, email, mobile, subject, emirate, gpa, status, sponsor, track_id,
-       assignments ? JSON.stringify(assignments) : null,
-       corrections ? JSON.stringify(corrections) : null,
-       notes]
+      [req.params.id, name, email, mobile, subject, emirate, gpa, status, sponsor,
+       track_id || trackId, national_id || nationalId, source_batch || sourceBatch,
+       enrollments ? JSON.stringify(enrollments) : null, hiring ? JSON.stringify(hiring) : null,
+       JSON.stringify(otherFields)]
     );
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Candidate not found' });
     }
     
-    console.log('✅ Candidate updated:', result.rows[0].id);
-    res.json(result.rows[0]);
+    const candidate = result.rows[0];
+    const candidateData = candidate.candidate_data || {};
+    const { candidate_data, ...rest } = candidate;
+    
+    console.log('✅ Candidate updated:', candidate.id);
+    res.json({ ...rest, ...candidateData });
   } catch (error) {
     console.error('Update candidate error:', error);
     res.status(500).json({ error: 'Failed to update candidate' });
@@ -408,62 +510,110 @@ app.delete('/api/candidates/:id', async (req, res) => {
 app.get('/api/courses', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM courses ORDER BY created_at DESC');
-    res.json(result.rows);
+    // Merge course_data into each course for frontend compatibility
+    const courses = result.rows.map(course => {
+      const courseData = course.course_data || {};
+      const { course_data, ...rest } = course;
+      return { ...rest, ...courseData };
+    });
+    res.json(courses);
   } catch (error) {
     console.error('Get courses error:', error);
     res.status(500).json({ error: 'Failed to fetch courses' });
   }
 });
 
+// Courses - Get by ID
+app.get('/api/courses/:id', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM courses WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Course not found' });
+    }
+    const course = result.rows[0];
+    const courseData = course.course_data || {};
+    const { course_data, ...rest } = course;
+    res.json({ ...rest, ...courseData });
+  } catch (error) {
+    console.error('Get course error:', error);
+    res.status(500).json({ error: 'Failed to fetch course' });
+  }
+});
+
 // Courses - Create
 app.post('/api/courses', async (req, res) => {
   try {
-    const { code, title, track_id, duration_days, description, instructor, required } = req.body;
-    const id = `CR-${Date.now()}`;
+    const { id, code, title, brief, weight, passThreshold, isRequired, tracks, modality, hours, active, ...otherFields } = req.body;
+    const courseId = id || `CR-${Date.now()}`;
     
     const result = await pool.query(
-      `INSERT INTO courses (id, code, title, track_id, duration_days, description, instructor, required, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+      `INSERT INTO courses (id, code, title, brief, weight, pass_threshold, is_required, tracks, modality, hours, active, course_data, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         code = EXCLUDED.code,
+         title = EXCLUDED.title,
+         brief = EXCLUDED.brief,
+         weight = EXCLUDED.weight,
+         pass_threshold = EXCLUDED.pass_threshold,
+         is_required = EXCLUDED.is_required,
+         tracks = EXCLUDED.tracks,
+         modality = EXCLUDED.modality,
+         hours = EXCLUDED.hours,
+         active = EXCLUDED.active,
+         course_data = EXCLUDED.course_data
        RETURNING *`,
-      [id, code, title, track_id, duration_days, description, instructor, required || false]
+      [courseId, code, title, brief, weight || 0.3, passThreshold || 70, isRequired !== false, 
+       JSON.stringify(tracks || []), modality, hours, active !== false, JSON.stringify(otherFields)]
     );
     
-    console.log('✅ Course created:', result.rows[0].id);
-    res.status(201).json(result.rows[0]);
+    const course = result.rows[0];
+    const courseData = course.course_data || {};
+    const { course_data, ...rest } = course;
+    const response = { ...rest, ...courseData, passThreshold: course.pass_threshold, isRequired: course.is_required };
+    
+    console.log('✅ Course created:', course.id);
+    res.status(201).json(response);
   } catch (error) {
     console.error('Create course error:', error);
-    if (error.code === '23505') { // Unique violation
-      res.status(409).json({ error: 'Course code already exists' });
-    } else {
-      res.status(500).json({ error: 'Failed to create course' });
-    }
+    res.status(500).json({ error: 'Failed to create course' });
   }
 });
 
 // Courses - Update
 app.put('/api/courses/:id', async (req, res) => {
   try {
-    const { code, title, track_id, duration_days, description, instructor, required } = req.body;
+    const { code, title, brief, weight, passThreshold, isRequired, tracks, modality, hours, active, ...otherFields } = req.body;
     
     const result = await pool.query(
       `UPDATE courses 
        SET code = COALESCE($2, code),
            title = COALESCE($3, title),
-           track_id = COALESCE($4, track_id),
-           duration_days = COALESCE($5, duration_days),
-           description = COALESCE($6, description),
-           instructor = COALESCE($7, instructor),
-           required = COALESCE($8, required)
+           brief = COALESCE($4, brief),
+           weight = COALESCE($5, weight),
+           pass_threshold = COALESCE($6, pass_threshold),
+           is_required = COALESCE($7, is_required),
+           tracks = COALESCE($8, tracks),
+           modality = COALESCE($9, modality),
+           hours = COALESCE($10, hours),
+           active = COALESCE($11, active),
+           course_data = COALESCE(course_data, '{}'::jsonb) || $12::jsonb
        WHERE id = $1
        RETURNING *`,
-      [req.params.id, code, title, track_id, duration_days, description, instructor, required]
+      [req.params.id, code, title, brief, weight, passThreshold, isRequired,
+       tracks ? JSON.stringify(tracks) : null, modality, hours, active, JSON.stringify(otherFields)]
     );
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Course not found' });
     }
     
-    res.json(result.rows[0]);
+    const course = result.rows[0];
+    const courseData = course.course_data || {};
+    const { course_data, ...rest } = course;
+    const response = { ...rest, ...courseData, passThreshold: course.pass_threshold, isRequired: course.is_required };
+    
+    console.log('✅ Course updated:', course.id);
+    res.json(response);
   } catch (error) {
     console.error('Update course error:', error);
     res.status(500).json({ error: 'Failed to update course' });
@@ -492,28 +642,66 @@ app.delete('/api/courses/:id', async (req, res) => {
 app.get('/api/mentors', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM mentors ORDER BY created_at DESC');
-    res.json(result.rows);
+    // Merge mentor_data into each mentor for frontend compatibility
+    const mentors = result.rows.map(mentor => {
+      const mentorData = mentor.mentor_data || {};
+      const { mentor_data, ...rest } = mentor;
+      return { ...rest, ...mentorData };
+    });
+    res.json(mentors);
   } catch (error) {
     console.error('Get mentors error:', error);
     res.status(500).json({ error: 'Failed to fetch mentors' });
   }
 });
 
-// Mentors - Create
+// Mentors - Get by ID
+app.get('/api/mentors/:id', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM mentors WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Mentor not found' });
+    }
+    const mentor = result.rows[0];
+    const mentorData = mentor.mentor_data || {};
+    const { mentor_data, ...rest } = mentor;
+    res.json({ ...rest, ...mentorData });
+  } catch (error) {
+    console.error('Get mentor error:', error);
+    res.status(500).json({ error: 'Failed to fetch mentor' });
+  }
+});
+
+// Mentors - Create or Update (Upsert)
 app.post('/api/mentors', async (req, res) => {
   try {
-    const { name, email, phone, subject, emirate, experience_years, availability, notes } = req.body;
-    const id = `M-${Date.now()}`;
+    const { id, name, email, phone, subject, emirate, experience_years, experienceYears, availability, notes, ...otherFields } = req.body;
+    const mentorId = id || `M-${Date.now()}`;
     
     const result = await pool.query(
-      `INSERT INTO mentors (id, name, email, phone, subject, emirate, experience_years, availability, notes, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+      `INSERT INTO mentors (id, name, email, phone, subject, emirate, experience_years, availability, notes, mentor_data, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         name = COALESCE(EXCLUDED.name, mentors.name),
+         email = COALESCE(EXCLUDED.email, mentors.email),
+         phone = COALESCE(EXCLUDED.phone, mentors.phone),
+         subject = COALESCE(EXCLUDED.subject, mentors.subject),
+         emirate = COALESCE(EXCLUDED.emirate, mentors.emirate),
+         experience_years = COALESCE(EXCLUDED.experience_years, mentors.experience_years),
+         availability = COALESCE(EXCLUDED.availability, mentors.availability),
+         notes = COALESCE(EXCLUDED.notes, mentors.notes),
+         mentor_data = COALESCE(mentors.mentor_data, '{}'::jsonb) || EXCLUDED.mentor_data,
+         updated_at = NOW()
        RETURNING *`,
-      [id, name, email, phone, subject, emirate, experience_years, availability, notes]
+      [mentorId, name, email, phone, subject, emirate, experience_years || experienceYears, availability, notes, JSON.stringify(otherFields)]
     );
     
-    console.log('✅ Mentor created:', result.rows[0].id);
-    res.status(201).json(result.rows[0]);
+    const mentor = result.rows[0];
+    const mentorData = mentor.mentor_data || {};
+    const { mentor_data, ...rest } = mentor;
+    
+    console.log('✅ Mentor created/updated:', mentor.id);
+    res.status(201).json({ ...rest, ...mentorData });
   } catch (error) {
     console.error('Create mentor error:', error);
     if (error.code === '23505') { // Unique violation
@@ -527,7 +715,7 @@ app.post('/api/mentors', async (req, res) => {
 // Mentors - Update
 app.put('/api/mentors/:id', async (req, res) => {
   try {
-    const { name, email, phone, subject, emirate, experience_years, availability, notes } = req.body;
+    const { name, email, phone, subject, emirate, experience_years, experienceYears, availability, notes, ...otherFields } = req.body;
     
     const result = await pool.query(
       `UPDATE mentors 
@@ -538,17 +726,24 @@ app.put('/api/mentors/:id', async (req, res) => {
            emirate = COALESCE($6, emirate),
            experience_years = COALESCE($7, experience_years),
            availability = COALESCE($8, availability),
-           notes = COALESCE($9, notes)
+           notes = COALESCE($9, notes),
+           mentor_data = COALESCE(mentor_data, '{}'::jsonb) || $10::jsonb,
+           updated_at = NOW()
        WHERE id = $1
        RETURNING *`,
-      [req.params.id, name, email, phone, subject, emirate, experience_years, availability, notes]
+      [req.params.id, name, email, phone, subject, emirate, experience_years || experienceYears, availability, notes, JSON.stringify(otherFields)]
     );
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Mentor not found' });
     }
     
-    res.json(result.rows[0]);
+    const mentor = result.rows[0];
+    const mentorData = mentor.mentor_data || {};
+    const { mentor_data, ...rest } = mentor;
+    
+    console.log('✅ Mentor updated:', mentor.id);
+    res.json({ ...rest, ...mentorData });
   } catch (error) {
     console.error('Update mentor error:', error);
     res.status(500).json({ error: 'Failed to update mentor' });
@@ -564,6 +759,7 @@ app.delete('/api/mentors/:id', async (req, res) => {
       return res.status(404).json({ error: 'Mentor not found' });
     }
     
+    console.log('✅ Mentor deleted:', req.params.id);
     res.json({ success: true });
   } catch (error) {
     console.error('Delete mentor error:', error);

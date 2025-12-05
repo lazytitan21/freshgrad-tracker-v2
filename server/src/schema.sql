@@ -24,39 +24,45 @@ CREATE TABLE IF NOT EXISTS users (
     profile_data JSONB DEFAULT '{}'::jsonb
 );
 
--- Candidates Table
+-- Candidates Table (flexible schema to match frontend)
 CREATE TABLE IF NOT EXISTS candidates (
-    id VARCHAR(50) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
+    id VARCHAR(100) PRIMARY KEY,
+    name VARCHAR(255),
+    email VARCHAR(255),
     mobile VARCHAR(50),
     subject VARCHAR(100),
     emirate VARCHAR(100),
-    gpa DECIMAL(4,2),
+    gpa DECIMAL(5,2),
     status VARCHAR(100) DEFAULT 'Imported',
     sponsor VARCHAR(100),
     track_id VARCHAR(50),
-    assignments JSONB DEFAULT '[]'::jsonb,
-    corrections JSONB DEFAULT '[]'::jsonb,
-    notes TEXT,
+    national_id VARCHAR(100),
+    source_batch VARCHAR(255),
+    enrollments JSONB DEFAULT '[]'::jsonb,
+    hiring JSONB DEFAULT '{}'::jsonb,
+    candidate_data JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Courses Table
+-- Courses Table (flexible schema to match frontend)
 CREATE TABLE IF NOT EXISTS courses (
-    id VARCHAR(50) PRIMARY KEY,
-    code VARCHAR(50) UNIQUE NOT NULL,
+    id VARCHAR(100) PRIMARY KEY,
+    code VARCHAR(50) NOT NULL,
     title VARCHAR(255) NOT NULL,
-    track_id VARCHAR(50),
-    duration_days INTEGER,
-    description TEXT,
-    instructor VARCHAR(255),
-    required BOOLEAN DEFAULT false,
+    brief TEXT,
+    weight DECIMAL(4,2) DEFAULT 0.3,
+    pass_threshold INTEGER DEFAULT 70,
+    is_required BOOLEAN DEFAULT true,
+    tracks JSONB DEFAULT '[]'::jsonb,
+    modality VARCHAR(100),
+    hours INTEGER,
+    active BOOLEAN DEFAULT true,
+    course_data JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Mentors Table
+-- Mentors Table (flexible schema to match frontend)
 CREATE TABLE IF NOT EXISTS mentors (
     id VARCHAR(50) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -67,7 +73,9 @@ CREATE TABLE IF NOT EXISTS mentors (
     experience_years INTEGER,
     availability VARCHAR(50),
     notes TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    mentor_data JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Notifications Table

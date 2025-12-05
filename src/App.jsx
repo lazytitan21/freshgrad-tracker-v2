@@ -891,7 +891,7 @@ function Th({ children }){ return <th className="px-4 py-3 text-slate-600 text-x
 function Td({ children, ...rest }){ return <td className="px-4 py-3 align-top" {...rest}>{children}</td>; }
 
 function CoursesPage({ role }){
-  const { courses, setCourses, logEvent, notify } = useStore();
+  const { courses, setCourses, addCourse, updateCourse, deleteCourse, logEvent, notify } = useStore();
   const [q,setQ]=useState("");
   const [filterTrack,setFilterTrack] = useState("");
   const [filterCode,setFilterCode] = useState("");
@@ -951,7 +951,11 @@ function CoursesPage({ role }){
       active: !!form.active
     };
     if(editId){
-      setCourses(prev => prev.map(x => x.id===editId ? obj : x));
+      // Use API to update course
+      updateCourse(editId, obj).catch(err => {
+        console.error('Failed to update course:', err);
+        alert('Failed to save course. Please try again.');
+      });
       logEvent("course_updated",{ code, ts: new Date().toISOString() });
 
       // ADD ↓↓↓ — notify Manager & Trainer about UPDATE
@@ -969,7 +973,11 @@ function CoursesPage({ role }){
       });
 
     }else{
-      setCourses(prev => [obj, ...prev]);
+      // Use API to create course
+      addCourse(obj).catch(err => {
+        console.error('Failed to create course:', err);
+        alert('Failed to save course. Please try again.');
+      });
       logEvent("course_created",{ code, ts: new Date().toISOString() });
 
       // ADD ↓↓↓ — notify Manager & Trainer about NEW COURSE
@@ -993,7 +1001,11 @@ function CoursesPage({ role }){
   function delCourse(id){
     if(!window.confirm("Delete this course?")) return;
     const c = courses.find(x=>x.id===id);
-    setCourses(prev => prev.filter(x=>x.id!==id));
+    // Use API to delete course
+    deleteCourse(id).catch(err => {
+      console.error('Failed to delete course:', err);
+      alert('Failed to delete course. Please try again.');
+    });
     logEvent("course_deleted",{ code:c?.code, ts: new Date().toISOString() });
   }
   function toggleTrack(tid){
@@ -1116,12 +1128,12 @@ import CandidatesPage from "./pages/CandidatesPage";
 
 // Add Candidate Modal
 function AddCandidateModal({ open, onClose, onAdded }){
-  const { setCandidates, logEvent } = useStore();
+  const { addCandidate, logEvent } = useStore();
   const [form,setForm]=useState({ name:"", email:"", mobile:"", emirate:"", subject:"", gpa:"", nationalId:"" });
   const [err,setErr]=useState("");
   useEffect(()=>{ if(!open){ setForm({ name:"", email:"", mobile:"", emirate:"", subject:"", gpa:"", nationalId:"" }); setErr(""); } },[open]);
 
-  function submit(){
+  async function submit(){
     setErr("");
     const name=form.name.trim(), email=form.email.trim(), mobile=form.mobile.trim(), emirate=form.emirate.trim(), subject=form.subject.trim();
     const nationalId=form.nationalId.trim(); const gpa=Number(String(form.gpa).replace(",",".")); 
@@ -1130,7 +1142,7 @@ function AddCandidateModal({ open, onClose, onAdded }){
     if(!mobileRe.test(mobile.replace(/\s|-/g,""))){ setErr("Invalid UAE mobile (+9715… or 05XXXXXXXX)."); return; }
     const id=`C-${Date.now().toString().slice(-6)}`; const trackId=subjectToTrackId(subject);
     const newC={ id, name, nationalId, email, mobile, emirate, subject, gpa, trackId, status:"Imported", courseResults:[], enrollments:[], notesThread:[{ id:`N-${id}-0`, by:"System", role:"Admin", text:"Added manually.", ts:new Date().toISOString() }] };
-    setCandidates(prev=>[...prev,newC]); logEvent("candidate_added_manual",{ id, subject, trackId, ts:new Date().toISOString() }); alert("Candidate added."); onAdded?.(id);
+    try { await addCandidate(newC); logEvent("candidate_added_manual",{ id, subject, trackId, ts:new Date().toISOString() }); alert("Candidate added."); onAdded?.(id); } catch(e){ setErr("Failed to add candidate."); }
   }
   if(!open) return null;
   return (
@@ -1163,7 +1175,7 @@ function AddCandidateModal({ open, onClose, onAdded }){
 }
 
 function EditCandidateModal({ open, candidate, onClose }) {
-  const { setCandidates, logEvent } = useStore();
+  const { updateCandidate, logEvent } = useStore();
   const [form, setForm] = useState({
     name: "", email: "", mobile: "", emirate: "", subject: "", gpa: "", nationalId: ""
   });
@@ -1183,7 +1195,7 @@ function EditCandidateModal({ open, candidate, onClose }) {
     setErr("");
   }, [open, candidate]);
 
-  function save() {
+  async function save() {
     if (!candidate) return;
     setErr("");
     const name = form.name.trim();
@@ -1204,13 +1216,11 @@ function EditCandidateModal({ open, candidate, onClose }) {
     }
 
     const trackId = subjectToTrackId(subject);
-    setCandidates(prev => prev.map(c =>
-      c.id === candidate.id
-        ? { ...c, name, email, mobile, emirate, subject, gpa, nationalId, trackId }
-        : c
-    ));
-    logEvent("candidate_admin_updated", { id: candidate.id, ts: new Date().toISOString() });
-    onClose?.();
+    try {
+      await updateCandidate(candidate.id, { ...candidate, name, email, mobile, emirate, subject, gpa, nationalId, trackId });
+      logEvent("candidate_admin_updated", { id: candidate.id, ts: new Date().toISOString() });
+      onClose?.();
+    } catch(e) { setErr("Failed to update candidate."); }
   }
 
   if (!open || !candidate) return null;
@@ -1375,7 +1385,7 @@ function NonAdminCorrectionsPanel({ role, userName, items, pendingForTrainer, on
 
 // ------------------------------ Import Page ------------------------------
 function ImportPage(){
-  const { candidates, setCandidates, logEvent } = useStore();
+  const { candidates, bulkAddCandidates, logEvent } = useStore();
   const [file,setFile]=useState(null); const [step,setStep]=useState("upload");
   const [mapping,setMapping]=useState({}); const [headers,setHeaders]=useState([]); const [rawRows,setRawRows]=useState([]);
   const [errors,setErrors]=useState([]); const [warnings,setWarnings]=useState([]); const [preview,setPreview]=useState([]);
@@ -1423,13 +1433,13 @@ function ImportPage(){
     const existingEmails=new Set(candidates.map(c=>c.email)); rows.forEach((r,i)=>{ if(existingEmails.has(r.email)) warns.push({row:i+2, field:'email', msg:'Email already exists in system'}); });
     setErrors(errs); setWarnings(warns); setPreview(rows.slice(0,10)); setStep("preview");
   }
-  function commitImport(){
+  async function commitImport(){
     if(errors.length){ alert("Resolve errors before committing import."); return; }
     const rows=rawRows.map(r=>{
       const pick=k=>r[mapping[k]]??''; const subj=String(pick('subject')).trim(); const trackId=subjectToTrackId(subj); const mobile=String(pick('mobile')).replace(/\s|-/g,'').replace(/^\+9715/,'05');
       return { id:`IMP-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, name:String(pick('name')).trim(), nationalId:String(pick('nationalid')||'').trim(), email:String(pick('email')).trim(), mobile, emirate:String(pick('emirate')).trim(), subject:subj, gpa:Number(String(pick('gpa')).replace(',','.')), trackId, status:"Imported", courseResults:[], enrollments:[], notesThread:[] };
     });
-    setCandidates(prev=>[...prev,...rows]); logEvent("import_committed",{ count:rows.length, ts:new Date().toISOString() });
+    await bulkAddCandidates(rows); logEvent("import_committed",{ count:rows.length, ts:new Date().toISOString() });
     setFile(null); setHeaders([]); setRawRows([]); setMapping({}); setErrors([]); setWarnings([]); setPreview([]); setStep("upload");
     alert(`Imported ${rows.length} candidate(s).`);
   }
@@ -1491,7 +1501,7 @@ function ImportPage(){
 
 // ------------------------------ Results Upload ------------------------------
 function ResultsUploadPage(){
-  const { candidates, setCandidates } = useStore();
+  const { candidates, bulkUpdateCandidates } = useStore();
   const [rows,setRows]=useState([]); const [report,setReport]=useState({ ok:0, updated:0, errors:[] });
 
   function parseResultsCSV(text){
@@ -1509,20 +1519,23 @@ function ResultsUploadPage(){
     }catch(err){ alert("Failed to parse results: "+err.message); } };
     if(ext==="csv") reader.readAsText(f); else reader.readAsArrayBuffer(f);
   }
-  function applyResults(){
+  async function applyResults(){
     const errors=[]; let updated=0;
-    const byId=new Map(candidates.map(c=>[c.id,c])); setCandidates(prev=>{
-      const next=prev.map(c=>({...c, courseResults:[...(c.courseResults||[])]}));
-      rows.forEach((r,i)=>{
-        const c=byId.get(r.candidateId); if(!c){ errors.push(`Row ${i+2}: Unknown CandidateID ${r.candidateId}`); return; }
-        const target=next.find(x=>x.id===c.id);
-        const existing=target.courseResults.find(cr=>cr.code===r.courseCode);
-        const entry={ code:r.courseCode, title:r.courseCode, score:r.score, pass:!!r.pass, date:r.date };
-        if(existing) Object.assign(existing,entry); else target.courseResults.push(entry);
-        updated++;
-      });
-      return next;
+    const byId=new Map(candidates.map(c=>[c.id,c]));
+    const next=candidates.map(c=>({...c, courseResults:[...(c.courseResults||[])]}));
+    rows.forEach((r,i)=>{
+      const c=byId.get(r.candidateId); if(!c){ errors.push(`Row ${i+2}: Unknown CandidateID ${r.candidateId}`); return; }
+      const target=next.find(x=>x.id===c.id);
+      const existing=target.courseResults.find(cr=>cr.code===r.courseCode);
+      const entry={ code:r.courseCode, title:r.courseCode, score:r.score, pass:!!r.pass, date:r.date };
+      if(existing) Object.assign(existing,entry); else target.courseResults.push(entry);
+      updated++;
     });
+    const toUpdate = next.filter(c => {
+      const orig = byId.get(c.id);
+      return JSON.stringify(c.courseResults) !== JSON.stringify(orig.courseResults);
+    });
+    if (toUpdate.length > 0) await bulkUpdateCandidates(toUpdate);
     setReport({ ok:rows.length, updated, errors }); alert(`Processed ${rows.length} rows • Updated ${updated} candidates${errors.length?` • ${errors.length} issue(s)`:``}.`);
   }
 
@@ -1572,7 +1585,7 @@ function ResultsUploadPage(){
 
 // ------------------------------ Bulk Course Import (CSV) ------------------------------
 function BulkCourseImportCard(){
-  const { candidates, setCandidates, courses } = useStore();
+  const { candidates, bulkUpdateCandidates, courses } = useStore();
   const [logs, setLogs] = React.useState([]);
   const [busy, setBusy] = React.useState(false);
 
@@ -1677,7 +1690,15 @@ function BulkCourseImportCard(){
       }
     }
 
-    setCandidates(next);
+    // Sync updated candidates to database
+    const originalById = new Map((candidates||[]).map(c=>[c.id, c]));
+    const toUpdate = next.filter(c => {
+      const orig = originalById.get(c.id);
+      return JSON.stringify(c.enrollments) !== JSON.stringify(orig?.enrollments) ||
+             JSON.stringify(c.courseResults) !== JSON.stringify(orig?.courseResults);
+    });
+    if (toUpdate.length > 0) bulkUpdateCandidates(toUpdate);
+    
     setLogs([
       `Imported ${rows.length} rows.`,
       `Added enrollments: ${added}`,
@@ -1753,7 +1774,7 @@ function BulkCourseImportCard(){
 
 // ------------------------------ Graduation Review (uses course catalog) ------------------------------
 function GraduationReviewPage(){
-  const { candidates, setCandidates, setCorrections, logEvent, courses, notify } = useStore();
+  const { candidates, updateCandidate, bulkUpdateCandidates, setCorrections, logEvent, courses, notify } = useStore();
 
   const withDerived = candidates.map(c=>({
     ...c,
@@ -1770,10 +1791,13 @@ function GraduationReviewPage(){
     return !(meetsAvg && hasAll);
   });
 
-  function forceApprove(id){
-    setCandidates(prev=>prev.map(c=>c.id===id?{...c,status:"Graduated"}:c));
-    logEvent("graduation_force_approved",{ id, ts:new Date().toISOString() });
-    alert("Candidate marked as Graduated.");
+  async function forceApprove(id){
+    const candidate = candidates.find(c => c.id === id);
+    if (candidate) {
+      await updateCandidate(id, { ...candidate, status: "Graduated" });
+      logEvent("graduation_force_approved",{ id, ts:new Date().toISOString() });
+      alert("Candidate marked as Graduated.");
+    }
   }
   function requestClarification(id){
     setCorrections(prev=>[
@@ -1789,18 +1813,24 @@ function GraduationReviewPage(){
     });
     alert("Clarification sent to ECAE Trainer.");
   }
-  function approveAllValid(){
-    setCandidates(prev=>prev.map(c=>{
+  async function approveAllValid(){
+    const toUpdate = candidates.filter(c=>{
       const track=TRACKS.find(t=>t.id===c.trackId); const req=requiredCoursesForTrack(courses, c.trackId);
       const finalAvg=computeFinalAverage(c, courses)??0;
       const valid = track && finalAvg>=track.minAverage && req.every(course=>coursePassed(c, course));
-      return (valid && c.status!=="Graduated") ? { ...c, status:"Graduated" } : c;
-    }));
-    logEvent("graduation_approve_all_valid",{ ts:new Date().toISOString() });
+      return valid && c.status!=="Graduated";
+    }).map(c => ({ ...c, status: "Graduated" }));
+    if (toUpdate.length > 0) {
+      await bulkUpdateCandidates(toUpdate);
+      logEvent("graduation_approve_all_valid",{ count: toUpdate.length, ts:new Date().toISOString() });
+    }
   }
-  function markReadyForHiring(){
-    setCandidates(prev=>prev.map(c=> (c.status==="Graduated" ? { ...c, status:"Ready for Hiring" } : c)));
-    logEvent("graduation_mark_ready_for_hiring",{ ts:new Date().toISOString() });
+  async function markReadyForHiring(){
+    const toUpdate = candidates.filter(c => c.status === "Graduated").map(c => ({ ...c, status: "Ready for Hiring" }));
+    if (toUpdate.length > 0) {
+      await bulkUpdateCandidates(toUpdate);
+      logEvent("graduation_mark_ready_for_hiring",{ count: toUpdate.length, ts:new Date().toISOString() });
+    }
   }
 
   return (
@@ -2083,20 +2113,20 @@ function UsersPage(){
 
 // ------------------------------ Hiring Tracker ------------------------------
 function HiringTrackerPage(){
-  const { candidates, setCandidates } = useStore();
+  const { candidates, updateCandidate, setCandidates } = useStore();
   const [q, setQ] = useState("");
   const [stageFilter, setStageFilter] = useState("ALL");
 
   const STAGES = HIRING_STAGES;
 
   useEffect(() => {
-    setCandidates(prev => prev.map(c => {
+    // Initialize hiring data for candidates without it
+    candidates.forEach(c => {
       if ((c.status==="Graduated" || c.status==="Ready for Hiring") && !c.hiring) {
-        return { ...c, hiring: { stage: "Graduated", updatedAt: new Date().toISOString(), notes: "" } };
+        updateCandidate(c.id, { ...c, hiring: { stage: "Graduated", updatedAt: new Date().toISOString(), notes: "" } });
       }
-      return c;
-    }));
-  }, [setCandidates]);
+    });
+  }, [candidates, updateCandidate]);
 
   const rows = useMemo(() => {
     const list = (candidates||[]).filter(c => c.hiring);
@@ -2122,13 +2152,19 @@ function HiringTrackerPage(){
     return { total, byStage, assigned, onHold, rejected };
   }, [candidates, STAGES]);
 
-  function setStage(id, stage){
-    setCandidates(prev => prev.map(c => c.id===id ? { ...c, hiring: { ...(c.hiring||{}), stage, updatedAt: new Date().toISOString() } } : c));
+  async function setStage(id, stage){
+    const candidate = candidates.find(c => c.id === id);
+    if (candidate) {
+      await updateCandidate(id, { ...candidate, hiring: { ...(candidate.hiring||{}), stage, updatedAt: new Date().toISOString() } });
+    }
   }
 
   
-  function setNotes(id, notes){
-    setCandidates(prev => prev.map(c => c.id===id ? { ...c, hiring: { ...(c.hiring||{}), notes, updatedAt: new Date().toISOString() } } : c));
+  async function setNotes(id, notes){
+    const candidate = candidates.find(c => c.id === id);
+    if (candidate) {
+      await updateCandidate(id, { ...candidate, hiring: { ...(candidate.hiring||{}), notes, updatedAt: new Date().toISOString() } });
+    }
   }
 
   function exportHiring(){
@@ -3100,7 +3136,7 @@ if(typeof window!=="undefined"){ try{ runDevTests(); }catch(e){ console.error("D
 
 function ApplicantsPage(){
   const { users, adminUpdateUser } = useAuth();
-  const { notify, setCandidates } = useStore();
+  const { notify, addCandidate } = useStore();
 
   const applicants = users.filter(u => u.role==="Teacher" && u.interested);
   const [open, setOpen] = React.useState(null); // email of selected applicant
@@ -3109,7 +3145,7 @@ function ApplicantsPage(){
     [open, applicants]
   );
 
-  function accept(email){
+  async function accept(email){
     const u = users.find(x => x.email.toLowerCase() === String(email).toLowerCase());
     if (!u) return;
     const id = `C-${Date.now().toString().slice(-6)}`;
@@ -3130,7 +3166,7 @@ function ApplicantsPage(){
       enrollments: [],
       notesThread: [{ id:`N-${id}`, who:"Admin", text:"Accepted from applicants.", ts:new Date().toISOString() }]
     };
-    setCandidates(prev => [...prev, newC]);
+    await addCandidate(newC);
     adminUpdateUser(email, { applicantStatus: "Accepted", candidateId: id });
     notify({ role:"Admin" }, { type:"applicant_accepted", title:"Applicant accepted", body:`${u.name} moved to Candidates`, target:{ page:"candidates", candidateId:id } });
     alert("Applicant accepted and added to Candidates.");
