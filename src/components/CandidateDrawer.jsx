@@ -31,9 +31,13 @@ function Info({ label, value }){ return (<div className="rounded-2xl border p-3 
 function Section({ title, children }){ return (<div className="mt-6"><div className="font-semibold mb-2">{title}</div>{children}</div>); }
 
 function CandidateDrawer({ open, onClose, candidate, role, generateCandidatePDF, logEvent, notify }){
-  const { user } = useAuth();
+  const { user, users } = useAuth();
   const currentName = user?.name || user?.email || "User";
   const { candidates: _candidates, setCandidates, updateCandidate: updateCandidateAPI, syncCandidate, corrections, setCorrections, courses } = useStore();
+
+  // Look up the linked user to get Emirates ID if not on candidate
+  const linkedUser = (users || []).find(u => (u.email || "").toLowerCase() === (candidate?.email || "").toLowerCase());
+  const emiratesId = candidate?.nationalId || linkedUser?.emiratesIdNumber || "—";
 
   const updateCandidate = useCallback(async (patch) => {
     // Update local state immediately for responsiveness
@@ -168,7 +172,7 @@ function CandidateDrawer({ open, onClose, candidate, role, generateCandidatePDF,
             </Section>
 
             <div className="mt-4 grid grid-cols-2 gap-3">
-              <Info label="Emirates ID" value={candidate.nationalId || "—"} />
+              <Info label="Emirates ID" value={emiratesId} />
               <Info label="Emirate" value={(
                 <select className="rounded-lg border px-3 py-2 w-48 text-sm" value={candidate.emirate || ""} onChange={e => updateCandidate({ emirate: e.target.value })}>
                   <option value="">Select emirate…</option>
