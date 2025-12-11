@@ -4,14 +4,21 @@ import { useAuth } from "../providers/AuthProvider";
 
 export default function LoginPage(){
   const { login } = useAuth();
-  const [email,setEmail] = useState(""); const [password,setPassword] = useState(""); const [err,setErr]=useState("");
+  const [email,setEmail] = useState("");
+  const [password,setPassword] = useState("");
+  const [err,setErr]=useState("");
+  const [loading, setLoading] = useState(false);
   async function submit(e){
     e.preventDefault();
     setErr("");
+    setLoading(true);
     try {
       await login(email.trim(), password);
     } catch(ex) {
       setErr(ex.message || "Invalid email or password");
+      console.log('Login error:', ex);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -47,7 +54,7 @@ export default function LoginPage(){
 
           {err && <div className="text-sm text-rose-600">{err}</div>}
 
-          <button className="w-full rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-2">Sign in</button>
+          <button className="w-full rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-2" disabled={loading}>{loading ? "Signing in..." : "Sign in"}</button>
 
           <div className="flex items-center justify-between text-xs text-slate-500">
             <span>Demo accounts are pre-seeded.</span>
