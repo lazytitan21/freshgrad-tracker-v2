@@ -5,7 +5,15 @@ import { useAuth } from "../providers/AuthProvider";
 export default function LoginPage(){
   const { login } = useAuth();
   const [email,setEmail] = useState(""); const [password,setPassword] = useState(""); const [err,setErr]=useState("");
-  function submit(e){ e.preventDefault(); setErr(""); try{ login(email.trim(), password); }catch(ex){ setErr(ex.message||"Login failed"); } }
+  async function submit(e){
+    e.preventDefault();
+    setErr("");
+    try {
+      await login(email.trim(), password);
+    } catch(ex) {
+      setErr(ex.message || "Invalid email or password");
+    }
+  }
 
   return (
     <div className="min-h-screen grid place-items-center bg-gradient-to-b from-slate-50 to-white">
