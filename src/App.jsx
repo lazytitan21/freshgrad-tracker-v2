@@ -2017,13 +2017,9 @@ function UsersPage(){
   },[q,users]);
 
   function changeRole(email, role){ adminUpdateUser(email, { role }); }
-  async function resetPwd(email){
-    try {
-      const temp = await adminResetPassword(email);
-      alert(`Temporary password for ${email}: ${temp}`);
-    } catch(e) {
-      alert(e.message || "Failed to reset");
-    }
+  function resetPwd(email){
+    try{ const temp = adminResetPassword(email); alert(`Temporary password for ${email}: ${temp}`); }
+    catch(e){ alert(e.message||"Failed to reset"); }
   }
   function del(email){
     if ((user?.email||"").toLowerCase() === String(email||"").toLowerCase()){
