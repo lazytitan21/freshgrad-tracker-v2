@@ -1,19 +1,25 @@
 # Database Schema
 
-Complete database schema documentation for FreshGrad Tracker.
+Complete database schema documentation for Talent Tracker (MOE Professional Development Platform).
 
 ## Overview
 
-The application uses **PostgreSQL** as the primary database, hosted on Render.com.
+The application uses **PostgreSQL** as the primary database, hosted on **Supabase**.
 
 ### Connection
 
 ```javascript
+// For Supabase, use Session Pooler connection (port 6543)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: { rejectUnauthorized: false }
 });
 ```
+
+**Important:** When using Supabase:
+- Use the **Session Pooler** connection string (port 6543), not the direct connection
+- URL encode special characters in password (e.g., `@` becomes `%40`)
+- Always enable SSL with `rejectUnauthorized: false`
 
 ---
 
@@ -205,6 +211,11 @@ CREATE TABLE IF NOT EXISTS mentors (
     email VARCHAR(255),
     phone VARCHAR(50),
     specialization VARCHAR(255),
+    subject VARCHAR(255),
+    emirate VARCHAR(100),
+    experience_years INTEGER,
+    availability VARCHAR(100),
+    notes TEXT,
     mentor_data JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -218,9 +229,108 @@ CREATE TABLE IF NOT EXISTS mentors (
 | email | VARCHAR(255) | Email address |
 | phone | VARCHAR(50) | Phone number |
 | specialization | VARCHAR(255) | Area of expertise |
+| subject | VARCHAR(255) | Teaching subject |
+| emirate | VARCHAR(100) | UAE emirate |
+| experience_years | INTEGER | Years of experience |
+| availability | VARCHAR(100) | Full-time, Part-time, etc. |
+| notes | TEXT | Additional notes |
 | mentor_data | JSONB | Additional data |
 | created_at | TIMESTAMP | Creation time |
 | updated_at | TIMESTAMP | Last update time |
+
+---
+
+### roles
+
+Role definitions with customizable permissions (NEW).
+
+```sql
+CREATE TABLE IF NOT EXISTS roles (
+    id VARCHAR(100) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT,
+    color VARCHAR(50) DEFAULT 'slate',
+    permissions JSONB DEFAULT '[]'::jsonb,
+    is_system BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | VARCHAR(100) | Primary key (e.g., "admin", "ecae-manager") |
+| name | VARCHAR(255) | Display name (e.g., "Admin", "ECAE Manager") |
+| description | TEXT | Role description |
+| color | VARCHAR(50) | UI color theme (indigo, emerald, amber, etc.) |
+| permissions | JSONB | Array of permission IDs |
+| is_system | BOOLEAN | Protected system role (cannot be deleted) |
+| created_at | TIMESTAMP | Creation time |
+| updated_at | TIMESTAMP | Last update time |
+
+**permissions JSONB structure:**
+```json
+["dashboard", "candidates", "courses", "mentors", "users", "roles", "settings"]
+```
+
+**Available Permissions:**
+| Permission ID | Description |
+|--------------|-------------|
+| dashboard | View main dashboard |
+| candidates | Manage candidates |
+| applicants | Manage job applicants |
+| mentors | Manage mentors |
+| users | Manage platform users |
+| courses | Manage training courses |
+| enrollment | Manage course enrollments |
+| results | Upload training results |
+| import | Import bulk data |
+| graduation | Review graduations |
+| hiring | Hiring tracker |
+| exports | Reports & exports |
+| roles | Role management |
+| settings | System settings |
+
+**Default System Roles:**
+```javascript
+const DEFAULT_ROLES = [
+  {
+    id: 'admin',
+    name: 'Admin',
+    description: 'Full system access with all permissions',
+    color: 'indigo',
+    permissions: ['dashboard', 'candidates', 'courses', 'import', 'results', 
+                  'graduation', 'applicants', 'exports', 'settings', 'users', 
+                  'hiring', 'enrollment', 'mentors', 'roles'],
+    is_system: true
+  },
+  {
+    id: 'ecae-manager',
+    name: 'ECAE Manager',
+    description: 'Manage training programs and candidates',
+    color: 'emerald',
+    permissions: ['dashboard', 'candidates', 'courses', 'results', 'graduation', 
+                  'applicants', 'hiring', 'enrollment', 'mentors'],
+    is_system: true
+  },
+  {
+    id: 'ecae-trainer',
+    name: 'ECAE Trainer',
+    description: 'Upload results and manage enrollments',
+    color: 'amber',
+    permissions: ['candidates', 'courses', 'results', 'enrollment'],
+    is_system: true
+  },
+  {
+    id: 'auditor',
+    name: 'Auditor',
+    description: 'View-only access for auditing purposes',
+    color: 'slate',
+    permissions: ['dashboard', 'candidates'],
+    is_system: true
+  }
+];
+```
 
 ---
 

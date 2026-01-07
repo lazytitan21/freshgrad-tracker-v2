@@ -1,6 +1,6 @@
 # Architecture Overview
 
-System architecture and design documentation for FreshGrad Tracker.
+System architecture and design documentation for Talent Tracker (MOE Professional Development Platform).
 
 ## High-Level Architecture
 
@@ -25,7 +25,7 @@ System architecture and design documentation for FreshGrad Tracker.
                           │ HTTPS
                           ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Render.com Platform                           │
+│                    Render.com / Supabase                         │
 │  ┌─────────────────────────────────────────────────────────────┐│
 │  │                 Express.js Server                            ││
 │  │  ┌─────────────────┐  ┌─────────────────────────────────┐   ││
@@ -39,10 +39,10 @@ System architecture and design documentation for FreshGrad Tracker.
 │  └──────────────────────────────────────┼───────────────────────┘│
 │                                         │                        │
 │  ┌──────────────────────────────────────▼───────────────────────┐│
-│  │                    PostgreSQL Database                        ││
-│  │  ┌─────────┐ ┌────────────┐ ┌─────────┐ ┌─────────┐ ┌──────┐ ││
-│  │  │ users   │ │ candidates │ │ courses │ │ mentors │ │ news │ ││
-│  │  └─────────┘ └────────────┘ └─────────┘ └─────────┘ └──────┘ ││
+│  │              Supabase PostgreSQL Database                     ││
+│  │  ┌───────┐ ┌────────────┐ ┌─────────┐ ┌─────────┐ ┌───────┐  ││
+│  │  │ users │ │ candidates │ │ courses │ │ mentors │ │ roles │  ││
+│  │  └───────┘ └────────────┘ └─────────┘ └─────────┘ └───────┘  ││
 │  └──────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -65,23 +65,53 @@ System architecture and design documentation for FreshGrad Tracker.
 
 ```
 src/
-├── App.jsx              # Main app + all pages
+├── App.jsx              # Main app + all page components
 ├── main.jsx             # React entry point
-├── index.css            # Global styles + Tailwind
+├── index.css            # Global styles + Tailwind + Design System
 │
 ├── providers/
-│   ├── AuthProvider.jsx   # Authentication context
-│   └── StoreProvider.jsx  # Data/state context
+│   ├── AuthProvider.jsx   # Authentication context (login, register, users)
+│   └── StoreProvider.jsx  # Data/state context (candidates, courses, mentors, roles)
 │
 ├── components/
-│   └── CandidateDrawer.jsx  # Reusable components
+│   ├── CandidateDrawer.jsx   # Candidate detail drawer
+│   ├── LoadingComponents.jsx # Loading spinners and skeletons
+│   └── Toast.jsx             # Toast notification system
+│
+├── pages/
+│   ├── CandidatesPage.jsx    # Candidates management
+│   ├── Dashboard.jsx         # Main dashboard
+│   ├── LoginPage.jsx         # Login page (professional design)
+│   ├── MentorsPage.jsx       # Mentors management
+│   └── UsersManagementPage.jsx # User administration
 │
 ├── config/
-│   └── api.js           # API configuration
+│   └── api.js           # API configuration & endpoints
 │
 └── utils/
     └── helpers.js       # Utility functions
 ```
+
+### Pages in App.jsx
+
+The main `App.jsx` contains all major page components:
+
+| Page | Description | Permissions |
+|------|-------------|-------------|
+| `Dashboard` | KPI cards, charts, welcome header, bottlenecks | dashboard |
+| `CandidatesPage` | Candidate table with search, filters, CRUD | candidates |
+| `ApplicantsPage` | Job application management | applicants |
+| `CoursesPage` | Training course management | courses |
+| `CourseEnrollmentPage` | Enroll candidates in courses | enrollment |
+| `MentorsPage` | Mentor management with details | mentors |
+| `ResultsUploadPage` | Upload training results | results |
+| `GraduationReviewPage` | Review graduation status | graduation |
+| `ImportPage` | Bulk data import | import |
+| `ExportsPage` | Export reports and data | exports |
+| `HiringTrackerPage` | Track hiring pipeline | hiring |
+| `UsersPage` | Platform user management | users |
+| `RoleManagementPage` | Configure roles and permissions | roles |
+| `SettingsPage` | User profile settings | settings |
 
 ### State Management
 
@@ -103,52 +133,95 @@ The app uses React Context for global state:
 └─────────────────────────────────────────┘
 ```
 
-**AuthProvider** manages:
-- Current user
-- Login/logout
+**AuthProvider** (`src/providers/AuthProvider.jsx`) manages:
+- Current user session
+- Login/logout/register
+- User CRUD for admins
 - Session persistence (localStorage)
+- Profile updates
 
-**StoreProvider** manages:
-- Candidates list
-- Courses list
-- Mentors list
-- News/updates
-- API operations (CRUD)
+**StoreProvider** (`src/providers/StoreProvider.jsx`) manages:
+- `candidates` - Candidate data and CRUD operations
+- `courses` - Course data and CRUD operations
+- `mentors` - Mentor data and CRUD operations
+- `roles` - Role definitions with permissions (from database)
+- `publicNews` - News/updates
+- `notifications` - In-app notifications
+- Loading states for each data type
 
-### Data Flow
+### Permission System
 
+Permissions are stored in the `roles` table in the database and fetched at app load:
+
+```javascript
+// Role structure from database
+{
+  id: "admin",
+  name: "Admin",
+  description: "Full system access",
+  color: "indigo",
+  permissions: ["dashboard", "candidates", "courses", ...],
+  is_system: true
+}
+
+// In AppShell component
+const { roles } = useStore();
+const roleData = roles.find(r => r.name === userRole);
+const allowed = roleData?.permissions || FALLBACK_PERMISSIONS[userRole] || [];
+
+// Navigation items filtered by permissions
+const visibleItems = section.items.filter(item => allowed.includes(item.id));
 ```
-User Action (click, form submit)
-         │
-         ▼
-┌─────────────────┐
-│ Component calls │
-│ context method  │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ StoreProvider   │
-│ API call        │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ fetch() to      │
-│ /api/endpoint   │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Update state    │
-│ setState()      │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ React re-render │
-│ UI updates      │
-└─────────────────┘
+
+### Navigation Structure
+
+Sidebar navigation is organized into collapsible sections:
+
+```javascript
+const NAV_SECTIONS = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    items: [{ id: 'dashboard', label: 'Dashboard', icon: 'Home' }]
+  },
+  {
+    id: 'people',
+    label: 'People Management',
+    items: [
+      { id: 'candidates', label: 'Candidates', icon: 'Users' },
+      { id: 'applicants', label: 'Applicants', icon: 'UserPlus' },
+      { id: 'mentors', label: 'Mentors', icon: 'Award' }
+    ]
+  },
+  {
+    id: 'training',
+    label: 'Training & Courses',
+    items: [
+      { id: 'courses', label: 'Courses', icon: 'BookOpen' },
+      { id: 'enrollment', label: 'Enrollment', icon: 'ClipboardList' },
+      { id: 'results', label: 'Upload Results', icon: 'UploadCloud' }
+    ]
+  },
+  {
+    id: 'workflow',
+    label: 'Workflow',
+    items: [
+      { id: 'import', label: 'Import Data', icon: 'FilePlus' },
+      { id: 'graduation', label: 'Graduation Review', icon: 'GraduationCap' },
+      { id: 'hiring', label: 'Hiring Tracker', icon: 'Briefcase' }
+    ]
+  },
+  {
+    id: 'system',
+    label: 'System',
+    items: [
+      { id: 'exports', label: 'Reports & Exports', icon: 'Download' },
+      { id: 'users', label: 'Platform Users', icon: 'User' },
+      { id: 'roles', label: 'Role Management', icon: 'Shield' },
+      { id: 'settings', label: 'Settings', icon: 'Settings' }
+    ]
+  }
+];
 ```
 
 ## Backend Architecture
@@ -159,20 +232,22 @@ User Action (click, form submit)
 |-------|------------|---------|
 | Runtime | Node.js 18+ | JavaScript runtime |
 | Framework | Express 4 | Web framework |
-| Database | PostgreSQL | Relational database |
+| Database | PostgreSQL (Supabase) | Relational database |
 | DB Driver | pg (node-postgres) | PostgreSQL client |
 
-### Server Structure
+### Server Structure (`server-db.cjs`)
 
 ```javascript
-// server-db.cjs
-
 // 1. Dependencies
 const express = require('express');
 const { Pool } = require('pg');
+require('dotenv').config(); // For local development
 
-// 2. Database Connection
-const pool = new Pool({ connectionString: DATABASE_URL });
+// 2. Database Connection (Supabase)
+const pool = new Pool({ 
+  connectionString: DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
 // 3. Middleware
 app.use(express.json());
@@ -180,16 +255,21 @@ app.use(cors());
 
 // 4. Database Initialization
 async function initDatabase() {
-  // Create tables
-  // Run migrations
+  // Create tables: users, candidates, courses, mentors, roles, news
+  // Run migrations for new columns
+  // Seed default roles
 }
 
-// 5. API Routes
-app.get('/api/users', ...);
-app.post('/api/users', ...);
-// etc.
+// 5. API Routes organized by entity:
+// - Users: /api/users, /api/users/auth/login, /api/users/auth/register
+// - Candidates: /api/candidates (CRUD)
+// - Courses: /api/courses (CRUD)
+// - Mentors: /api/mentors (CRUD)
+// - Roles: /api/roles (CRUD)
+// - News: /api/news (CRUD)
+// - Health: /health
 
-// 6. Static Files
+// 6. Static Files (production)
 app.use(express.static('dist'));
 
 // 7. SPA Fallback
@@ -199,207 +279,179 @@ app.get('*', (req, res) => res.sendFile('dist/index.html'));
 app.listen(PORT);
 ```
 
-### Request Flow
+### Database Tables
 
-```
-HTTP Request
-     │
-     ▼
-┌─────────────────┐
-│ Express Router  │
-└────────┬────────┘
-     │
-     ├──► /api/* ──► API Handler ──► Database Query ──► JSON Response
-     │
-     └──► /* ──► Static File / SPA index.html
-```
+| Table | Purpose | Key Fields |
+|-------|---------|------------|
+| `users` | Platform user accounts | id, email, password, name, role, profile_data |
+| `candidates` | Training candidates | id, name, eid, emirate, school, status, cohort |
+| `courses` | Training courses | id, name, code, hours, description, category |
+| `mentors` | Mentor profiles | id, name, email, subject, emirate, experience_years, availability |
+| `roles` | Role definitions | id, name, description, color, permissions (JSONB), is_system |
+| `news` | News/announcements | id, title, content, created_at |
 
-### Database Connection Pool
+### API Endpoints
 
-```javascript
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },  // Required for Render
-  max: 20,                              // Max connections
-  idleTimeoutMillis: 30000,            // Close idle connections
-  connectionTimeoutMillis: 2000,        // Timeout for new connections
-});
-```
+#### Users
+- `GET /api/users` - List all users (admin only)
+- `POST /api/users/auth/register` - Register new user
+- `POST /api/users/auth/login` - Login (returns user data)
+- `GET /api/users/email/:email` - Get user by email
+- `PUT /api/users/:id` - Update user
+- `DELETE /api/users/:id` - Delete user
 
-## API Design
+#### Candidates
+- `GET /api/candidates` - List all candidates
+- `POST /api/candidates` - Create candidate
+- `PUT /api/candidates/:id` - Update candidate
+- `DELETE /api/candidates/:id` - Delete candidate
 
-### RESTful Endpoints
+#### Courses
+- `GET /api/courses` - List all courses
+- `POST /api/courses` - Create course
+- `PUT /api/courses/:id` - Update course
+- `DELETE /api/courses/:id` - Delete course
 
-| Method | Endpoint | Action |
-|--------|----------|--------|
-| GET | /api/resource | List all |
-| GET | /api/resource/:id | Get one |
-| POST | /api/resource | Create |
-| PUT | /api/resource/:id | Update |
-| DELETE | /api/resource/:id | Delete |
+#### Mentors
+- `GET /api/mentors` - List all mentors
+- `POST /api/mentors` - Create mentor
+- `PUT /api/mentors/:id` - Update mentor
+- `DELETE /api/mentors/:id` - Delete mentor
 
-### Response Format
+#### Roles
+- `GET /api/roles` - List all roles with permissions
+- `POST /api/roles` - Create custom role
+- `PUT /api/roles/:id` - Update role permissions
+- `DELETE /api/roles/:id` - Delete custom role (not system roles)
 
-**Success:**
-```json
-{
-  "id": "...",
-  "field": "value",
-  ...
+## Design System
+
+### CSS Variables (defined in `src/index.css`)
+
+```css
+:root {
+  /* Brand Colors */
+  --brand-primary: #4f46e5;      /* Indigo */
+  --brand-primary-dark: #4338ca;
+  --brand-primary-light: #818cf8;
+  --brand-secondary: #0891b2;    /* Cyan */
+  --brand-accent: #059669;       /* Emerald */
+
+  /* Semantic Colors */
+  --success: #059669;
+  --warning: #d97706;
+  --error: #dc2626;
+  --info: #0284c7;
+
+  /* Neutral Colors */
+  --bg: #f8fafc;
+  --bg-secondary: #f1f5f9;
+  --panel: #ffffff;
+  --muted: #64748b;
+  --text: #0f172a;
+  --text-secondary: #475569;
+  --border: #e2e8f0;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+
+  /* Spacing */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+
+  /* Border Radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
 }
 ```
 
-**Error:**
-```json
-{
-  "error": "Error message"
-}
+### UI Component Classes
+
+```css
+/* Buttons */
+.btn { /* Base button styles */ }
+.btn-primary { /* Indigo gradient button */ }
+.btn-secondary { /* White/outline button */ }
+.btn-success { /* Green button */ }
+.btn-danger { /* Red button */ }
+
+/* Forms */
+.form-input { /* Text input styling */ }
+.form-label { /* Label styling */ }
+.form-select { /* Select dropdown */ }
+
+/* Cards */
+.panel { /* White card with shadow */ }
+.card-hover { /* Hover effect */ }
+
+/* Status badges */
+.badge { /* Base badge */ }
+.badge-success, .badge-warning, .badge-error, .badge-info
 ```
 
-### JSONB for Flexibility
+## Development
 
-Using JSONB columns for flexible data:
+### Local Setup
 
-```javascript
-// Candidate with flexible data
-{
-  id: "CND-001",
-  name: "Student Name",
-  enrollments: [...],      // JSONB array
-  hiring: {...},           // JSONB object
-  candidate_data: {...}    // JSONB catch-all
-}
+```bash
+# Install dependencies
+npm install
+
+# Create .env file with Supabase connection
+echo "DATABASE_URL=postgresql://..." > .env
+echo "PORT=3001" >> .env
+
+# Run both servers
+npm run dev:full   # Runs backend + frontend concurrently
+
+# Or run separately:
+npm run dev:server  # Backend on port 3001
+npm run dev         # Frontend on port 5173
 ```
 
-## Security Considerations
+### Environment Variables
 
-### Current Implementation
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DATABASE_URL` | Supabase PostgreSQL connection string | `postgresql://user:pass@host:6543/postgres` |
+| `PORT` | Server port | `3001` (local) or `8080` (Render) |
+| `NODE_ENV` | Environment | `development` or `production` |
 
-| Aspect | Status | Notes |
-|--------|--------|-------|
-| HTTPS | ✅ | Render provides SSL |
-| CORS | ⚠️ | Currently allows all origins |
-| Auth | ⚠️ | Simple email/password |
-| Passwords | ⚠️ | Stored as plain text (should hash) |
-| SQL Injection | ✅ | Using parameterized queries |
-| XSS | ✅ | React escapes by default |
+### Deployment (Render)
 
-### Recommendations for Production
+1. Push to GitHub main branch
+2. Render auto-deploys from GitHub
+3. Environment variables configured in Render dashboard
+4. Build: `npm install && npm run build`
+5. Start: `node server-db.cjs`
 
-1. **Hash passwords** with bcrypt
-2. **Implement JWT** for session management
-3. **Restrict CORS** to specific origins
-4. **Add rate limiting** to prevent abuse
-5. **Implement input validation** on server
+## Key Features
 
-## Scalability
+### Role-Based Access Control
+- Roles stored in database with customizable permissions
+- System roles (Admin, ECAE Manager, ECAE Trainer, Auditor) protected from deletion
+- Custom roles can be created with specific permission sets
+- Sidebar navigation filtered by user's role permissions
 
-### Current Limits (Render Free Tier)
+### Real-time Data
+- StoreProvider fetches all data on app mount
+- Loading states for each data type
+- Optimistic UI updates for better UX
 
-- Web Service: 750 hours/month
-- Database: 1 GB storage, 256 MB RAM
-- Spin-down: After 15 minutes inactive
+### Toast Notifications
+- Success, error, warning, info types
+- Auto-dismiss with configurable duration
+- Stacked notifications
 
-### Scaling Options
-
-1. **Upgrade Render Plan** for:
-   - Always-on service
-   - More database resources
-   - Auto-scaling
-
-2. **Database Optimization**:
-   - Add indexes for frequently queried columns
-   - Implement connection pooling (already done)
-   - Consider read replicas for heavy read loads
-
-3. **Caching**:
-   - Add Redis for session storage
-   - Cache frequently accessed data
-
-## Deployment Pipeline
-
-```
-Developer Machine          GitHub              Render
-      │                      │                   │
-      │  git push            │                   │
-      ├─────────────────────►│                   │
-      │                      │  webhook          │
-      │                      ├──────────────────►│
-      │                      │                   │
-      │                      │         ┌─────────┴─────────┐
-      │                      │         │ 1. npm install    │
-      │                      │         │ 2. npm run build  │
-      │                      │         │ 3. Start server   │
-      │                      │         │ 4. Health check   │
-      │                      │         └─────────┬─────────┘
-      │                      │                   │
-      │                      │   deploy complete │
-      │◄─────────────────────┴───────────────────┤
-```
-
-## File Serving
-
-### Static Assets
-
-```
-public/
-├── Heros/          # Hero images
-│   ├── hero.JPG
-│   ├── Hero2.JPG
-│   └── ...
-└── users.json      # (Legacy)
-```
-
-Served by Express static middleware:
-```javascript
-app.use(express.static(path.join(__dirname, 'dist')));
-```
-
-### SPA Routing
-
-All non-API routes serve index.html:
-```javascript
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-```
-
-This enables client-side routing to work after page refresh.
-
----
-
-## Technology Decisions
-
-### Why React?
-- Component-based architecture
-- Large ecosystem
-- Easy state management with Context
-- Great developer experience
-
-### Why Vite?
-- Fast development server (HMR)
-- Quick builds with Rollup
-- Modern ES modules support
-- Easy configuration
-
-### Why Express?
-- Lightweight and flexible
-- Large middleware ecosystem
-- Easy to understand
-- Great for APIs
-
-### Why PostgreSQL?
-- Reliable and mature
-- JSONB support for flexibility
-- Free tier on Render
-- Good performance
-
-### Why Render?
-- Easy deployment from GitHub
-- Managed PostgreSQL included
-- Free tier available
-- Auto-deploy on push
-
----
-
-**Last Updated:** December 2024
+### Responsive Design
+- Mobile-friendly sidebar (hidden on small screens)
+- Responsive tables and forms
+- Touch-friendly UI elements
