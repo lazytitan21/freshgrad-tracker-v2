@@ -13,6 +13,10 @@ console.log('🚀 Starting FreshGrad Tracker API Server with Database...');
 
 const app = express();
 
+// Force DNS to resolve IPv4 first (fixes Render -> Supabase IPv6 connectivity issues)
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
+
 // Database connection pool
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
