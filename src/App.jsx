@@ -460,25 +460,27 @@ function AppShell({ page, setPage }) {
   const editCandidate = React.useMemo(() => (Array.isArray(candidates) ? candidates.find(c => String(c.id) === String(editCandidateId)) : null), [candidates, editCandidateId]);
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
-    <aside className="hidden md:flex flex-col gap-3 border-r bg-white panel p-2 w-64" style={{ boxSizing: "border-box" }}>
-        <div className="flex items-center gap-2 mb-2 px-2">
-          <button onClick={()=>setPage('dashboard')} className="flex items-center gap-3 w-full text-left focus:outline-none">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-sm">
-                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 4h6v6H3z M15 4h6v6h-6z M15 14h6v6h-6z M9 7h6 M9 7v10 M15 7v7" />
-                </svg>
-              </div>
-              <div className="flex flex-col">
-                <div className="font-bold text-xl leading-tight text-slate-900 dark:text-white">Talent Tracker</div>
-                <div className="text-sm text-slate-600">MOE - ECAE</div>
-              </div>
+    <div className="flex min-h-screen bg-app">
+      {/* Sidebar */}
+      <aside className="hidden md:flex flex-col border-r sidebar w-64 p-4" style={{ boxSizing: "border-box" }}>
+        {/* Logo Section */}
+        <div className="mb-6">
+          <button onClick={()=>setPage('dashboard')} className="flex items-center gap-3 w-full text-left focus:outline-none group">
+            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
+              <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 4h6v6H3z M15 4h6v6h-6z M15 14h6v6h-6z M9 7h6 M9 7v10 M15 7v7" />
+              </svg>
+            </div>
+            <div className="flex flex-col">
+              <div className="font-bold text-lg leading-tight">Talent Tracker</div>
+              <div className="text-xs text-muted">MOE - ECAE</div>
             </div>
           </button>
         </div>
 
-        <nav className="flex flex-col gap-1 px-1">
+        {/* Navigation */}
+        <nav className="flex-1 flex flex-col gap-1">
+          <div className="text-xs font-semibold text-muted uppercase tracking-wider mb-2 px-3">Main Menu</div>
           {(() => {
             const ICONS = {
               dashboard: Home,
@@ -497,36 +499,52 @@ function AppShell({ page, setPage }) {
             };
             return NAV.filter(n => allowed.includes(n.id)).map(n => {
               const Icon = ICONS[n.id] || Home;
+              const isActive = page === n.id;
               return (
                 <Motion.button
                   key={n.id}
                   onClick={() => setPage(n.id)}
                   title={n.label}
-                  layout
-                  whileHover={{ scale: 1.03 }}
+                  whileHover={{ x: 2 }}
+                  whileTap={{ scale: 0.98 }}
                   className={classNames(
-                    "relative flex items-center gap-3 rounded-xl px-2 py-2 font-medium hover:bg-slate-100"
+                    "nav-item",
+                    isActive && "active"
                   )}
                 >
-                  {/* Active indicator: vertical accent bar */}
-                  <span className={classNames("absolute left-0 top-1 bottom-1 w-1 rounded-r-md", page===n.id?"bg-emerald-500":"bg-transparent")} aria-hidden />
-                  <div className={classNames("h-8 w-8 rounded-lg panel flex items-center justify-center text-sm font-semibold bg-slate-100 text-slate-700") }>
-                    <Icon className="h-5 w-5 text-slate-700" />
+                  <span className="nav-indicator" aria-hidden />
+                  <div className={classNames(
+                    "h-9 w-9 rounded-lg flex items-center justify-center transition-colors",
+                    isActive ? "bg-indigo-100 text-indigo-600" : "bg-slate-100 text-slate-600 group-hover:bg-slate-200"
+                  )}>
+                    <Icon className="h-5 w-5" />
                   </div>
-                  <Motion.span key={n.id+"-label"} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -6 }} className="whitespace-nowrap">
+                  <span className={classNames(
+                    "text-sm font-medium",
+                    isActive ? "text-indigo-700" : ""
+                  )}>
                     {n.label}
-                  </Motion.span>
+                  </span>
                 </Motion.button>
               );
             });
           })()}
         </nav>
 
-        <div className="mt-auto text-xs text-slate-400 px-2"> 
-          <div className="text-sm">Role: {role}</div>
+        {/* Footer */}
+        <div className="pt-4 border-t mt-4">
+          <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-slate-50">
+            <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center">
+              <User className="h-4 w-4 text-indigo-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium truncate">{user?.name || 'User'}</div>
+              <div className="text-xs text-muted">{role}</div>
+            </div>
+          </div>
         </div>
       </aside>
-      <main className="flex-1">
+      <main className="flex-1 overflow-auto">
         <TopBar />
         <div className="p-4 md:p-8">
           <AnimatePresence mode="wait">
@@ -642,18 +660,37 @@ function HBarChart({ data, width = 420, rowHeight = 22, gap = 8, labelWidth = 16
   );
 }
 
-function KpiCard({ label, value, hint }) {
+function KpiCard({ label, value, hint, icon: Icon, trend, trendValue }) {
   return (
     <Motion.div
       layout
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -4, boxShadow: "0 8px 20px rgba(2,6,23,0.08)" }}
-      className="rounded-2xl border panel p-4 shadow-sm"
+      whileHover={{ y: -2, boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)" }}
+      className="kpi-card group"
     >
-      <div className="text-slate-500 text-xs">{label}</div>
-      <div className="text-2xl font-semibold">{value}</div>
-      {hint && <div className="text-xs text-slate-400 mt-1">{hint}</div>}
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="kpi-label">{label}</div>
+          <div className="kpi-value">{value}</div>
+          {hint && <div className="text-xs text-slate-400 mt-1.5">{hint}</div>}
+          {trend && (
+            <div className={`kpi-trend ${trend === 'up' ? 'kpi-trend-up' : 'kpi-trend-down'}`}>
+              {trend === 'up' ? (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0v-8m0 8l-8-8-4 4-6-6" /></svg>
+              )}
+              {trendValue}
+            </div>
+          )}
+        </div>
+        {Icon && (
+          <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
+            <Icon className="w-5 h-5 text-indigo-600" />
+          </div>
+        )}
+      </div>
     </Motion.div>
   );
 }

@@ -66,21 +66,24 @@ export function coursePassed(candidate, course){
 }
 
 export function statusBadgeColor(status){
+  // Professional status badge styling using design system
   const map = {
-    Imported: "bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-100",
-    Eligible: "bg-sky-100 text-sky-800 dark:bg-sky-700 dark:text-sky-100",
-    Assigned: "bg-indigo-100 text-indigo-800 dark:bg-indigo-700 dark:text-indigo-100",
-    "In Training": "bg-amber-100 text-amber-800 dark:bg-amber-700 dark:text-amber-100",
-    "Courses Completed": "bg-emerald-100 text-emerald-800 dark:bg-emerald-700 dark:text-emerald-100",
-    Assessed: "bg-teal-100 text-teal-800 dark:bg-teal-700 dark:text-teal-100",
-    Graduated: "bg-green-100 text-green-800 dark:bg-green-700 dark:text-green-100",
-    "Ready for Hiring": "bg-lime-100 text-lime-800 dark:bg-lime-700 dark:text-lime-100",
-    "Hired/Closed": "bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-100",
-    "On Hold": "bg-orange-100 text-orange-800 dark:bg-orange-700 dark:text-orange-100",
-    Withdrawn: "bg-rose-100 text-rose-800 dark:bg-rose-700 dark:text-rose-100",
-    Rejected: "bg-red-100 text-red-800 dark:bg-red-700 dark:text-red-100",
+    // Pipeline stages
+    Imported: "badge-neutral",
+    Eligible: "badge-info",
+    Assigned: "badge-primary",
+    "In Training": "badge-warning",
+    "Courses Completed": "badge-success",
+    Assessed: "bg-teal-50 text-teal-700 ring-1 ring-teal-600/20",
+    Graduated: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20",
+    "Ready for Hiring": "bg-lime-50 text-lime-700 ring-1 ring-lime-600/20",
+    "Hired/Closed": "bg-slate-100 text-slate-600 ring-1 ring-slate-500/20",
+    // Exception statuses
+    "On Hold": "bg-orange-50 text-orange-700 ring-1 ring-orange-600/20",
+    Withdrawn: "badge-error",
+    Rejected: "badge-error",
   };
-  return map[status] || "bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-100";
+  return map[status] || "badge-neutral";
 }
 
 export function parseCSV(text){
