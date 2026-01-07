@@ -40,6 +40,10 @@ export const API_ENDPOINTS = {
   applicantStatus: (email) => `${API_BASE_URL}/applicants/${email}/status`,
   applicantDocs: (email) => `${API_BASE_URL}/applicants/${email}/docs`,
   interestedApplicants: `${API_BASE_URL}/applicants/filter/interested`,
+  
+  // Roles
+  roles: `${API_BASE_URL}/roles`,
+  roleById: (id) => `${API_BASE_URL}/roles/${id}`,
 };
 
 /**

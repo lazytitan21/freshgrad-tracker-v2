@@ -1,9 +1,10 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
-import { Workflow, Home, Users, BookOpen, ClipboardList, FilePlus, UploadCloud, GraduationCap, Download, UserPlus, Briefcase, User, Settings, Sun, Moon } from "lucide-react";
+import { Workflow, Home, Users, BookOpen, ClipboardList, FilePlus, UploadCloud, GraduationCap, Download, UserPlus, Briefcase, User, Settings, Sun, Moon, AlertTriangle, Clock, TrendingUp, TrendingDown, Award, ChevronDown, ChevronRight, Shield } from "lucide-react";
 import { AuthProvider, useAuth } from "./providers/AuthProvider";
 import { StoreProvider, useStore } from "./providers/StoreProvider";
+import { ToastProvider, useToast } from "./components/Toast";
 import MentorsPage from "./pages/MentorsPage";
 
 /* FreshGrad Training Tracker — Courses Catalog + Assignments + Corrections + Charts + Candidate PDF + Courses Exports */
@@ -302,26 +303,60 @@ function DownloadTemplateButton({ filename, buildCSV }){
 }
 
 // ------------------------------ App chrome ------------------------------
-const NAV = [
-
-  { id:"dashboard",  label:"Dashboard" },
-  { id:"candidates", label:"Candidates" },
-  { id:"courses",    label:"Courses" },
-  { id:"enrollment", label:"Course Enrollment" },
-  { id:"import",     label:"Import Candidates" },
-  { id:"results",    label:"Upload Results (ECAE)" },
-  { id:"graduation", label:"Graduation Review" },
-  { id:"exports",    label:"Exports" },
-  { id:"applicants", label:"Applicants" },
-  { id:"hiring",     label:"Hiring Tracker" },
-  { id:"mentors",    label:"Mentors" },
-  { id:"users",      label:"Platform Users" },
-  { id:"settings",   label:"Settings" },
-
+// Navigation structure with sections and pages
+const NAV_SECTIONS = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    items: [
+      { id: 'dashboard', label: 'Dashboard', icon: 'Home' },
+    ]
+  },
+  {
+    id: 'people',
+    label: 'People Management',
+    items: [
+      { id: 'candidates', label: 'Candidates', icon: 'Users' },
+      { id: 'applicants', label: 'Applicants', icon: 'UserPlus' },
+      { id: 'mentors', label: 'Mentors', icon: 'GraduationCap' },
+      { id: 'users', label: 'Platform Users', icon: 'User' },
+    ]
+  },
+  {
+    id: 'training',
+    label: 'Training & Courses',
+    items: [
+      { id: 'courses', label: 'Course Catalog', icon: 'BookOpen' },
+      { id: 'enrollment', label: 'Enrollment', icon: 'ClipboardList' },
+      { id: 'results', label: 'Upload Results', icon: 'UploadCloud' },
+    ]
+  },
+  {
+    id: 'workflow',
+    label: 'Workflow',
+    items: [
+      { id: 'import', label: 'Import Data', icon: 'FilePlus' },
+      { id: 'graduation', label: 'Graduation Review', icon: 'Award' },
+      { id: 'hiring', label: 'Hiring Tracker', icon: 'Briefcase' },
+    ]
+  },
+  {
+    id: 'system',
+    label: 'System',
+    items: [
+      { id: 'exports', label: 'Reports & Exports', icon: 'Download' },
+      { id: 'roles', label: 'Role Management', icon: 'Shield' },
+      { id: 'settings', label: 'Settings', icon: 'Settings' },
+    ]
+  },
 ];
+
+// Flat NAV for backward compatibility
+const NAV = NAV_SECTIONS.flatMap(section => section.items.map(item => ({ id: item.id, label: item.label })));
+
 const ROLES = ["Admin","ECAE Manager","ECAE Trainer","Auditor","Student"];
 const ROLE_PERMISSIONS = {
-  Admin:["dashboard","candidates","courses","import","results","graduation","applicants","exports","settings","users","hiring","enrollment","mentors"],
+  Admin:["dashboard","candidates","courses","import","results","graduation","applicants","exports","settings","users","hiring","enrollment","mentors","roles"],
   "ECAE Manager":["dashboard","candidates","courses","results","graduation","applicants","hiring","enrollment","mentors"],
   "ECAE Trainer":["candidates","courses","results","enrollment"],
   Auditor:["dashboard","candidates"],
@@ -449,9 +484,36 @@ function SignOutButton(){
 
 function AppShell({ page, setPage }) {
   const { user } = useAuth();
-  const role = user?.role;
-  const allowed = ROLE_PERMISSIONS[role] || [];
-  // Sidebar is static now (always expanded)
+  const { roles, loading } = useStore();
+  const userRole = user?.role;
+  const role = userRole; // Alias for backwards compatibility
+  
+  // Fallback permissions while roles are loading from database
+  const FALLBACK_PERMISSIONS = {
+    Admin: ["dashboard","candidates","courses","import","results","graduation","applicants","exports","settings","users","hiring","enrollment","mentors","roles"],
+    "ECAE Manager": ["dashboard","candidates","courses","results","graduation","applicants","hiring","enrollment","mentors"],
+    "ECAE Trainer": ["candidates","courses","results","enrollment"],
+    Auditor: ["dashboard","candidates"],
+  };
+  
+  // Get permissions from database roles, fallback to hardcoded while loading
+  const roleData = roles.find(r => r.name === userRole || r.id === userRole);
+  const allowed = roleData?.permissions || FALLBACK_PERMISSIONS[userRole] || [];
+  
+  // Track expanded sections
+  const [expandedSections, setExpandedSections] = useState(() => {
+    // Start with all sections collapsed
+    return [];
+  });
+  
+  const toggleSection = (sectionId) => {
+    setExpandedSections(prev => 
+      prev.includes(sectionId) 
+        ? prev.filter(id => id !== sectionId)
+        : [...prev, sectionId]
+    );
+  };
+
   // Provide app-level selection for candidate drawer
   const { candidates, logEvent, notify } = useStore();
   const [selectedId, setSelectedId] = useState("");
@@ -459,88 +521,135 @@ function AppShell({ page, setPage }) {
   const selected = React.useMemo(() => (Array.isArray(candidates) ? candidates.find(c => String(c.id) === String(selectedId)) : null), [candidates, selectedId]);
   const editCandidate = React.useMemo(() => (Array.isArray(candidates) ? candidates.find(c => String(c.id) === String(editCandidateId)) : null), [candidates, editCandidateId]);
 
+  // Icon mapping
+  const ICONS = {
+    Home, Users, BookOpen, ClipboardList, FilePlus, UploadCloud, 
+    GraduationCap, Download, UserPlus, Briefcase, User, Settings, Award, Shield
+  };
+
   return (
     <div className="flex min-h-screen bg-app">
       {/* Sidebar */}
-      <aside className="hidden md:flex flex-col border-r sidebar w-64 p-4" style={{ boxSizing: "border-box" }}>
+      <aside className="hidden md:flex flex-col border-r sidebar w-72 bg-slate-50/50" style={{ boxSizing: "border-box" }}>
         {/* Logo Section */}
-        <div className="mb-6">
+        <div className="p-5 border-b bg-white">
           <button onClick={()=>setPage('dashboard')} className="flex items-center gap-3 w-full text-left focus:outline-none group">
-            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
-              <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all group-hover:scale-105">
+              <svg className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 4h6v6H3z M15 4h6v6h-6z M15 14h6v6h-6z M9 7h6 M9 7v10 M15 7v7" />
               </svg>
             </div>
             <div className="flex flex-col">
-              <div className="font-bold text-lg leading-tight">Talent Tracker</div>
-              <div className="text-xs text-muted">MOE - ECAE</div>
+              <div className="font-bold text-lg leading-tight text-slate-900">Talent Tracker</div>
+              <div className="text-xs text-slate-500 font-medium">MOE Professional Development</div>
             </div>
           </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 flex flex-col gap-1">
-          <div className="text-xs font-semibold text-muted uppercase tracking-wider mb-2 px-3">Main Menu</div>
-          {(() => {
-            const ICONS = {
-              dashboard: Home,
-              candidates: Users,
-              mentors: Users,
-              courses: BookOpen,
-              enrollment: ClipboardList,
-              import: FilePlus,
-              results: UploadCloud,
-              graduation: GraduationCap,
-              exports: Download,
-              applicants: UserPlus,
-              hiring: Briefcase,
-              users: User,
-              settings: Settings,
-            };
-            return NAV.filter(n => allowed.includes(n.id)).map(n => {
-              const Icon = ICONS[n.id] || Home;
-              const isActive = page === n.id;
-              return (
-                <Motion.button
-                  key={n.id}
-                  onClick={() => setPage(n.id)}
-                  title={n.label}
-                  whileHover={{ x: 2 }}
-                  whileTap={{ scale: 0.98 }}
+        {/* Navigation Sections */}
+        <nav className="flex-1 overflow-y-auto py-4 px-3">
+          {NAV_SECTIONS.map((section) => {
+            // Filter items based on permissions
+            const visibleItems = section.items.filter(item => allowed.includes(item.id));
+            if (visibleItems.length === 0) return null;
+            
+            const isExpanded = expandedSections.includes(section.id);
+            const hasActiveItem = visibleItems.some(item => item.id === page);
+            
+            return (
+              <div key={section.id} className="mb-2">
+                {/* Section Header */}
+                <button
+                  onClick={() => toggleSection(section.id)}
                   className={classNames(
-                    "nav-item",
-                    isActive && "active"
+                    "w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors",
+                    hasActiveItem ? "text-indigo-700 bg-indigo-50" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
                   )}
                 >
-                  <span className="nav-indicator" aria-hidden />
-                  <div className={classNames(
-                    "h-9 w-9 rounded-lg flex items-center justify-center transition-colors",
-                    isActive ? "bg-indigo-100 text-indigo-600" : "bg-slate-100 text-slate-600 group-hover:bg-slate-200"
-                  )}>
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <span className={classNames(
-                    "text-sm font-medium",
-                    isActive ? "text-indigo-700" : ""
-                  )}>
-                    {n.label}
-                  </span>
-                </Motion.button>
-              );
-            });
-          })()}
+                  <span>{section.label}</span>
+                  <Motion.div
+                    animate={{ rotate: isExpanded ? 0 : -90 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </Motion.div>
+                </button>
+                
+                {/* Section Items */}
+                <AnimatePresence initial={false}>
+                  {isExpanded && (
+                    <Motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="mt-1 ml-2 space-y-0.5">
+                        {visibleItems.map(item => {
+                          const Icon = ICONS[item.icon] || Home;
+                          const isActive = page === item.id;
+                          
+                          return (
+                            <Motion.button
+                              key={item.id}
+                              onClick={() => setPage(item.id)}
+                              whileHover={{ x: 3 }}
+                              whileTap={{ scale: 0.98 }}
+                              className={classNames(
+                                "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
+                                isActive 
+                                  ? "bg-white text-indigo-700 shadow-sm border border-indigo-100" 
+                                  : "text-slate-600 hover:bg-white hover:text-slate-900 hover:shadow-sm"
+                              )}
+                            >
+                              <div className={classNames(
+                                "h-8 w-8 rounded-lg flex items-center justify-center transition-colors",
+                                isActive 
+                                  ? "bg-indigo-100 text-indigo-600" 
+                                  : "bg-slate-100 text-slate-500 group-hover:bg-slate-200"
+                              )}>
+                                <Icon className="h-4 w-4" />
+                              </div>
+                              <span>{item.label}</span>
+                              {isActive && (
+                                <Motion.div
+                                  layoutId="activeIndicator"
+                                  className="ml-auto h-2 w-2 rounded-full bg-indigo-500"
+                                  transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                                />
+                              )}
+                            </Motion.button>
+                          );
+                        })}
+                      </div>
+                    </Motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
         </nav>
 
-        {/* Footer */}
-        <div className="pt-4 border-t mt-4">
-          <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-slate-50">
-            <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center">
-              <User className="h-4 w-4 text-indigo-600" />
+        {/* User Card Footer */}
+        <div className="p-4 border-t bg-white">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200">
+            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shadow-sm">
+              <span className="text-sm font-bold text-white">
+                {(user?.name || 'U').charAt(0).toUpperCase()}
+              </span>
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium truncate">{user?.name || 'User'}</div>
-              <div className="text-xs text-muted">{role}</div>
+              <div className="text-sm font-semibold text-slate-900 truncate">{user?.name || 'User'}</div>
+              <div className="text-xs text-slate-500">{role}</div>
             </div>
+            <button 
+              onClick={() => setPage('settings')} 
+              className="p-2 rounded-lg hover:bg-white hover:shadow-sm transition-all"
+              title="Settings"
+            >
+              <Settings className="h-4 w-4 text-slate-400" />
+            </button>
           </div>
         </div>
       </aside>
@@ -562,6 +671,7 @@ function AppShell({ page, setPage }) {
               {page==="settings"   && <SettingsPage />}
               {page==="users"      && <UsersPage />}
               {page==="hiring"     && <HiringTrackerPage />}
+              {page==="roles"      && <RoleManagementPage />}
             </Motion.div>
           </AnimatePresence>
 
@@ -660,34 +770,52 @@ function HBarChart({ data, width = 420, rowHeight = 22, gap = 8, labelWidth = 16
   );
 }
 
-function KpiCard({ label, value, hint, icon: Icon, trend, trendValue }) {
+const kpiVariants = {
+  primary: { bg: 'bg-indigo-50', iconBg: 'bg-indigo-100', icon: 'text-indigo-600', border: 'border-indigo-100' },
+  success: { bg: 'bg-emerald-50', iconBg: 'bg-emerald-100', icon: 'text-emerald-600', border: 'border-emerald-100' },
+  warning: { bg: 'bg-amber-50', iconBg: 'bg-amber-100', icon: 'text-amber-600', border: 'border-amber-100' },
+  danger: { bg: 'bg-red-50', iconBg: 'bg-red-100', icon: 'text-red-600', border: 'border-red-100' },
+  info: { bg: 'bg-sky-50', iconBg: 'bg-sky-100', icon: 'text-sky-600', border: 'border-sky-100' },
+  neutral: { bg: 'bg-slate-50', iconBg: 'bg-slate-100', icon: 'text-slate-600', border: 'border-slate-100' },
+};
+
+function KpiCard({ label, value, hint, icon: Icon, trend, trendValue, variant = 'primary', subtitle }) {
+  const colors = kpiVariants[variant] || kpiVariants.primary;
   return (
     <Motion.div
       layout
-      initial={{ opacity: 0, y: 6 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -2, boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1)" }}
-      className="kpi-card group"
+      whileHover={{ y: -3, boxShadow: "0 12px 28px -8px rgba(0,0,0,0.12)" }}
+      className={`relative overflow-hidden rounded-2xl border ${colors.border} bg-white p-5 shadow-sm transition-all duration-300 group min-h-[140px]`}
     >
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="kpi-label">{label}</div>
-          <div className="kpi-value">{value}</div>
-          {hint && <div className="text-xs text-slate-400 mt-1.5">{hint}</div>}
-          {trend && (
-            <div className={`kpi-trend ${trend === 'up' ? 'kpi-trend-up' : 'kpi-trend-down'}`}>
-              {trend === 'up' ? (
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0v-8m0 8l-8-8-4 4-6-6" /></svg>
-              )}
-              {trendValue}
-            </div>
-          )}
+      {/* Accent gradient */}
+      <div className={`absolute top-0 left-0 right-0 h-1 ${colors.iconBg}`} />
+      
+      <div className="flex items-start justify-between h-full">
+        <div className="flex flex-col justify-between h-full">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">{label}</div>
+            {subtitle && <div className="text-xs text-slate-400 mb-2">{subtitle}</div>}
+          </div>
+          <div>
+            <div className="text-3xl font-bold tracking-tight text-slate-900">{value}</div>
+            {hint && <div className="text-xs text-slate-500 mt-1.5">{hint}</div>}
+            {trend && (
+              <div className={`text-xs font-semibold mt-2 flex items-center gap-1 ${trend === 'up' ? 'text-emerald-600' : 'text-red-500'}`}>
+                {trend === 'up' ? (
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                )}
+                {trendValue}
+              </div>
+            )}
+          </div>
         </div>
         {Icon && (
-          <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
-            <Icon className="w-5 h-5 text-indigo-600" />
+          <div className={`h-12 w-12 rounded-xl ${colors.iconBg} flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
+            <Icon className={`w-6 h-6 ${colors.icon}`} />
           </div>
         )}
       </div>
@@ -718,6 +846,12 @@ function Stat({ label, value, hint }) {
 }
 function Dashboard() {
   const { candidates, courses, corrections } = useStore();
+  const { user } = useAuth();
+
+  // Current date for welcome message
+  const today = new Date();
+  const greeting = today.getHours() < 12 ? 'Good morning' : today.getHours() < 17 ? 'Good afternoon' : 'Good evening';
+  const formattedDate = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   // ---- Aggregations
   const byStatus = {};
@@ -741,6 +875,10 @@ function Dashboard() {
   const totalCandidates = candidates.length;
   const totalCourses = courses.length;
   const totalSubjects = Object.keys(bySubject).length;
+  const inTraining = byStatus['In Training'] || 0;
+  const graduated = byStatus['Graduated'] || 0;
+  const readyForHiring = byStatus['Ready for Hiring'] || 0;
+  const hiredClosed = byStatus['Hired/Closed'] || 0;
 
   // Top subjects & courses
   const topSubjects = Object.entries(bySubject).sort((a,b)=>b[1]-a[1]).slice(0,5)
@@ -811,105 +949,276 @@ function Dashboard() {
   const emirateRows = Object.entries(byEmirate).sort((a,b)=>b[1]-a[1]).slice(0,8)
     .map(([label,value]) => ({ label, value }));
 
-  return (
-    <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-      {/* KPIs */}
-      <div className="xl:col-span-12 grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
-        <KpiCard label="Total Candidates" value={totalCandidates} />
-        <KpiCard label="Graduated" value={byStatus["Graduated"] || 0} />
-        <KpiCard label="Ready for Hiring" value={byStatus["Ready for Hiring"] || 0} />
-        <KpiCard label="Courses (catalog)" value={totalCourses} />
-        <KpiCard label="Subjects (active)" value={totalSubjects} />
-        <KpiCard label="At Risk (needs attention)" value={atRisk} hint="Below avg or missing required passes" />
-      </div>
+  // Calculate progress percentage
+  const progressPct = totalCandidates > 0 ? Math.round((graduated / totalCandidates) * 100) : 0;
 
-      {/* Donut + Subject bars */}
-      <Motion.div layout initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} transition={{duration:0.45}} className="xl:col-span-5 rounded-2xl border bg-white p-4 shadow-sm">
-        <div className="flex items-center justify-between mb-2">
-          <div className="font-semibold">Pipeline by Status</div>
-          <div className="text-xs text-slate-500">Total {totalCandidates}</div>
+  return (
+    <div className="space-y-6">
+      {/* Welcome Header */}
+      <Motion.div 
+        initial={{ opacity: 0, y: -10 }} 
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+      >
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
+            {greeting}, {user?.name?.split(' ')[0] || 'Admin'}! 👋
+          </h1>
+          <p className="text-slate-500 mt-1">{formattedDate}</p>
         </div>
-        <div className="flex gap-4 items-center">
-          <DonutChart data={donut} centerLabel={totalCandidates || "0"} />
-          <div className="flex-1">
-            <ul className="text-sm space-y-1">
-              {donut.map((d,i)=>(
-                <li key={i} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-block h-3 w-3 rounded-sm" style={{background:d.color}} />
-                    <span>{d.label}</span>
-                  </div>
-                  <span className="text-slate-600">{d.value}</span>
-                </li>
-              ))}
-              {!donut.length && <li className="text-sm text-slate-500">No data yet.</li>}
-            </ul>
+        <div className="flex items-center gap-3">
+          <div className="px-4 py-2 rounded-xl bg-indigo-50 border border-indigo-100">
+            <div className="text-xs text-indigo-600 font-medium">Overall Progress</div>
+            <div className="text-lg font-bold text-indigo-700">{progressPct}% Graduated</div>
           </div>
         </div>
       </Motion.div>
 
-      <Motion.div layout initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} transition={{duration:0.45, delay:0.04}} className="xl:col-span-7 rounded-2xl border bg-white p-4 shadow-sm overflow-auto">
-        <div className="font-semibold mb-2">Top Subjects</div>
-        <VBarChart data={topSubjects} />
-      </Motion.div>
+      {/* KPI Cards - 4 per row for better proportions */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard 
+          label="Total Candidates" 
+          value={totalCandidates} 
+          icon={Users}
+          variant="primary"
+          subtitle="All enrolled"
+        />
+        <KpiCard 
+          label="In Training" 
+          value={inTraining} 
+          icon={BookOpen}
+          variant="info"
+          hint={`${totalCandidates > 0 ? Math.round((inTraining/totalCandidates)*100) : 0}% of total`}
+        />
+        <KpiCard 
+          label="Graduated" 
+          value={graduated} 
+          icon={GraduationCap}
+          variant="success"
+          trend={graduated > 0 ? 'up' : undefined}
+          trendValue={graduated > 0 ? `${progressPct}%` : undefined}
+        />
+        <KpiCard 
+          label="Ready for Hiring" 
+          value={readyForHiring} 
+          icon={Briefcase}
+          variant="success"
+          hint={hiredClosed > 0 ? `${hiredClosed} already hired` : undefined}
+        />
+      </div>
 
-      {/* Candidates per course + Emirates */}
-      <Motion.div layout initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} transition={{duration:0.45, delay:0.06}} className="xl:col-span-7 rounded-2xl border bg-white p-4 shadow-sm overflow-auto">
-        <div className="font-semibold mb-2">Candidates per Course (enrolled or with results)</div>
-        {topCourses.length ? <HBarChart data={topCourses} /> : <div className="text-sm text-slate-500">No course activity yet.</div>}
-      </Motion.div>
+      {/* Secondary KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard 
+          label="Active Courses" 
+          value={totalCourses} 
+          icon={ClipboardList}
+          variant="neutral"
+        />
+        <KpiCard 
+          label="Subjects" 
+          value={totalSubjects} 
+          icon={BookOpen}
+          variant="neutral"
+        />
+        <KpiCard 
+          label="At Risk" 
+          value={atRisk} 
+          icon={AlertTriangle}
+          variant="danger"
+          hint="Below avg or missing passes"
+        />
+        <KpiCard 
+          label="Stale Cases" 
+          value={stale} 
+          icon={Clock}
+          variant="warning"
+          hint="No activity > 21 days"
+        />
+      </div>
 
-      <Motion.div layout initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} transition={{duration:0.45, delay:0.08}} className="xl:col-span-5 rounded-2xl border bg-white p-4 shadow-sm overflow-auto">
-        <div className="font-semibold mb-2">Emirate Breakdown</div>
-        {emirateRows.length ? <HBarChart data={emirateRows} width={380} /> : <div className="text-sm text-slate-500">No emirate data.</div>}
-      </Motion.div>
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        {/* Donut Chart */}
+        <Motion.div 
+          layout 
+          initial={{opacity:0,y:8}} 
+          animate={{opacity:1,y:0}} 
+          transition={{duration:0.4}} 
+          className="xl:col-span-5 rounded-2xl border bg-white p-6 shadow-sm min-h-[320px]"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-semibold text-slate-900">Pipeline by Status</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Candidate distribution</p>
+            </div>
+            <div className="px-3 py-1 rounded-full bg-slate-100 text-xs font-medium text-slate-600">
+              {totalCandidates} total
+            </div>
+          </div>
+          <div className="flex gap-6 items-center">
+            <DonutChart data={donut} centerLabel={totalCandidates || "0"} />
+            <div className="flex-1">
+              <ul className="text-sm space-y-2">
+                {donut.map((d,i)=>(
+                  <li key={i} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-2.5 w-2.5 rounded-full" style={{background:d.color}} />
+                      <span className="text-slate-600">{d.label}</span>
+                    </div>
+                    <span className="font-medium text-slate-900">{d.value}</span>
+                  </li>
+                ))}
+                {!donut.length && <li className="text-sm text-slate-500">No data yet.</li>}
+              </ul>
+            </div>
+          </div>
+        </Motion.div>
 
-      {/* Bottlenecks & risks */}
-      <div className="xl:col-span-12 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        <Motion.div layout initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} transition={{duration:0.45, delay:0.1}} className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="font-semibold mb-2">Potential Bottlenecks</div>
-          <ul className="text-sm space-y-2">
-            <li className="flex items-center justify-between">
-              <span>Waiting for assignment / training (no enrollments)</span>
-              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs dark:bg-amber-700 dark:text-amber-100">{waitingNoEnroll}</span>
+        {/* Top Subjects */}
+        <Motion.div 
+          layout 
+          initial={{opacity:0,y:8}} 
+          animate={{opacity:1,y:0}} 
+          transition={{duration:0.4, delay:0.05}} 
+          className="xl:col-span-7 rounded-2xl border bg-white p-6 shadow-sm min-h-[320px]"
+        >
+          <div className="mb-4">
+            <h3 className="font-semibold text-slate-900">Top Subjects</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Candidates by specialization</p>
+          </div>
+          <VBarChart data={topSubjects} />
+        </Motion.div>
+      </div>
+
+      {/* Second Row of Charts */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        {/* Candidates per Course */}
+        <Motion.div 
+          layout 
+          initial={{opacity:0,y:8}} 
+          animate={{opacity:1,y:0}} 
+          transition={{duration:0.4, delay:0.1}} 
+          className="xl:col-span-7 rounded-2xl border bg-white p-6 shadow-sm min-h-[280px]"
+        >
+          <div className="mb-4">
+            <h3 className="font-semibold text-slate-900">Candidates per Course</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Enrollment & completion data</p>
+          </div>
+          {topCourses.length ? <HBarChart data={topCourses} /> : <div className="text-sm text-slate-500 py-8 text-center">No course activity yet.</div>}
+        </Motion.div>
+
+        {/* Emirate Breakdown */}
+        <Motion.div 
+          layout 
+          initial={{opacity:0,y:8}} 
+          animate={{opacity:1,y:0}} 
+          transition={{duration:0.4, delay:0.15}} 
+          className="xl:col-span-5 rounded-2xl border bg-white p-6 shadow-sm min-h-[280px]"
+        >
+          <div className="mb-4">
+            <h3 className="font-semibold text-slate-900">Emirate Distribution</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Geographic breakdown</p>
+          </div>
+          {emirateRows.length ? <HBarChart data={emirateRows} width={380} /> : <div className="text-sm text-slate-500 py-8 text-center">No emirate data.</div>}
+        </Motion.div>
+      </div>
+
+      {/* Bottlenecks & Pass Rates */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        {/* Bottlenecks */}
+        <Motion.div 
+          layout 
+          initial={{opacity:0,y:8}} 
+          animate={{opacity:1,y:0}} 
+          transition={{duration:0.4, delay:0.2}} 
+          className="xl:col-span-4 rounded-2xl border bg-white p-6 shadow-sm"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <div className="h-8 w-8 rounded-lg bg-amber-100 flex items-center justify-center">
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900">Attention Needed</h3>
+              <p className="text-xs text-slate-500">Potential bottlenecks</p>
+            </div>
+          </div>
+          <ul className="space-y-3">
+            <li className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors">
+              <span className="text-sm text-slate-600">Waiting for enrollment</span>
+              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${waitingNoEnroll > 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                {waitingNoEnroll}
+              </span>
             </li>
-            <li className="flex items-center justify-between">
-              <span>Pending clarifications (trainer inbox)</span>
-              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs dark:bg-amber-700 dark:text-amber-100">{pendingTrainerClarifications}</span>
+            <li className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors">
+              <span className="text-sm text-slate-600">Pending clarifications</span>
+              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${pendingTrainerClarifications > 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                {pendingTrainerClarifications}
+              </span>
             </li>
-            <li className="flex items-center justify-between">
-              <span>Stale cases (no activity &gt; 21 days)</span>
-              <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-xs dark:bg-rose-700 dark:text-rose-100">{stale}</span>
+            <li className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors">
+              <span className="text-sm text-slate-600">Stale cases (&gt;21 days)</span>
+              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${stale > 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                {stale}
+              </span>
             </li>
-            <li className="flex items-center justify-between">
-              <span>At-risk candidates (avg/reqs not met)</span>
-              <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-xs dark:bg-rose-700 dark:text-rose-100">{atRisk}</span>
+            <li className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors">
+              <span className="text-sm text-slate-600">At-risk candidates</span>
+              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${atRisk > 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                {atRisk}
+              </span>
             </li>
           </ul>
         </Motion.div>
 
-        <Motion.div layout initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} transition={{duration:0.45, delay:0.12}} className="rounded-2xl border bg-white p-4 shadow-sm md:col-span-1 xl:col-span-2 overflow-auto">
-          <div className="font-semibold mb-2">Courses with Lowest Pass Rates (required only)</div>
+        {/* Pass Rates Table */}
+        <Motion.div 
+          layout 
+          initial={{opacity:0,y:8}} 
+          animate={{opacity:1,y:0}} 
+          transition={{duration:0.4, delay:0.25}} 
+          className="xl:col-span-8 rounded-2xl border bg-white p-6 shadow-sm"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <div className="h-8 w-8 rounded-lg bg-indigo-100 flex items-center justify-center">
+              <ClipboardList className="w-4 h-4 text-indigo-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900">Course Pass Rates</h3>
+              <p className="text-xs text-slate-500">Required courses with lowest rates</p>
+            </div>
+          </div>
           {!passStats.length ? (
-            <div className="text-sm text-slate-500">No results yet.</div>
+            <div className="text-sm text-slate-500 py-8 text-center">No results recorded yet.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50">
-                  <tr className="text-left">
-                    <th className="px-3 py-2">Course</th>
-                    <th className="px-3 py-2">Pass&nbsp;Rate</th>
-                    <th className="px-3 py-2">Pass&nbsp;/&nbsp;Total</th>
-                    <th className="px-3 py-2">Threshold</th>
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Course</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Pass Rate</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Pass / Total</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Threshold</th>
                   </tr>
                 </thead>
                 <tbody>
                   {passStats.map((x, i) => (
-                    <tr key={i} className="border-t">
-                      <td className="px-3 py-2"><b>{x.code}</b> — {x.title}</td>
-                      <td className="px-3 py-2">{x.rate ?? "—"}%</td>
-                      <td className="px-3 py-2">{x.pass}/{x.total}</td>
-                      <td className="px-3 py-2">≥ {x.threshold}</td>
+                    <tr key={i} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <span className="font-medium text-slate-900">{x.code}</span>
+                        <span className="text-slate-500"> — {x.title}</span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          (x.rate ?? 0) >= 80 ? 'bg-emerald-100 text-emerald-700' :
+                          (x.rate ?? 0) >= 60 ? 'bg-amber-100 text-amber-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {x.rate ?? "—"}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center text-slate-600">{x.pass}/{x.total}</td>
+                      <td className="px-4 py-3 text-center text-slate-600">≥ {x.threshold}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2327,6 +2636,348 @@ function HiringTrackerPage(){
     </div>
   );
 }
+
+// ------------------------------ Role Management ------------------------------
+function RoleManagementPage() {
+  const { roles, addRole, updateRole, deleteRole: storeDeleteRole, loading } = useStore();
+  
+  const [showForm, setShowForm] = useState(false);
+  const [editingRole, setEditingRole] = useState(null);
+  const [form, setForm] = useState({ name: '', description: '', color: 'indigo', permissions: [] });
+  const [saving, setSaving] = useState(false);
+
+  const allPermissions = [
+    { id: 'dashboard', label: 'Dashboard', category: 'Overview' },
+    { id: 'candidates', label: 'Candidates', category: 'People' },
+    { id: 'applicants', label: 'Applicants', category: 'People' },
+    { id: 'mentors', label: 'Mentors', category: 'People' },
+    { id: 'users', label: 'Platform Users', category: 'People' },
+    { id: 'courses', label: 'Courses', category: 'Training' },
+    { id: 'enrollment', label: 'Enrollment', category: 'Training' },
+    { id: 'results', label: 'Upload Results', category: 'Training' },
+    { id: 'import', label: 'Import Data', category: 'Workflow' },
+    { id: 'graduation', label: 'Graduation Review', category: 'Workflow' },
+    { id: 'hiring', label: 'Hiring Tracker', category: 'Workflow' },
+    { id: 'exports', label: 'Reports & Exports', category: 'System' },
+    { id: 'roles', label: 'Role Management', category: 'System' },
+    { id: 'settings', label: 'Settings', category: 'System' },
+  ];
+
+  const permissionsByCategory = allPermissions.reduce((acc, perm) => {
+    if (!acc[perm.category]) acc[perm.category] = [];
+    acc[perm.category].push(perm);
+    return acc;
+  }, {});
+
+  const colorOptions = [
+    { id: 'indigo', label: 'Indigo', class: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
+    { id: 'emerald', label: 'Emerald', class: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+    { id: 'amber', label: 'Amber', class: 'bg-amber-100 text-amber-700 border-amber-200' },
+    { id: 'rose', label: 'Rose', class: 'bg-rose-100 text-rose-700 border-rose-200' },
+    { id: 'sky', label: 'Sky', class: 'bg-sky-100 text-sky-700 border-sky-200' },
+    { id: 'violet', label: 'Violet', class: 'bg-violet-100 text-violet-700 border-violet-200' },
+    { id: 'slate', label: 'Slate', class: 'bg-slate-100 text-slate-700 border-slate-200' },
+  ];
+
+  const getColorClass = (colorId) => colorOptions.find(c => c.id === colorId)?.class || colorOptions[0].class;
+
+  const openCreate = () => {
+    setEditingRole(null);
+    setForm({ name: '', description: '', color: 'indigo', permissions: [] });
+    setShowForm(true);
+  };
+
+  const openEdit = (role) => {
+    setEditingRole(role.id);
+    setForm({ 
+      name: role.name, 
+      description: role.description || '', 
+      color: role.color, 
+      permissions: Array.isArray(role.permissions) ? [...role.permissions] : [] 
+    });
+    setShowForm(true);
+  };
+
+  const togglePermission = (permId) => {
+    setForm(prev => ({
+      ...prev,
+      permissions: prev.permissions.includes(permId)
+        ? prev.permissions.filter(p => p !== permId)
+        : [...prev.permissions, permId]
+    }));
+  };
+
+  const toggleCategory = (category) => {
+    const categoryPerms = permissionsByCategory[category].map(p => p.id);
+    const allSelected = categoryPerms.every(p => form.permissions.includes(p));
+    setForm(prev => ({
+      ...prev,
+      permissions: allSelected
+        ? prev.permissions.filter(p => !categoryPerms.includes(p))
+        : [...new Set([...prev.permissions, ...categoryPerms])]
+    }));
+  };
+
+  const saveRole = async () => {
+    if (!form.name.trim()) {
+      alert('Please enter a role name');
+      return;
+    }
+    
+    setSaving(true);
+    try {
+      if (editingRole) {
+        await updateRole(editingRole, {
+          name: form.name,
+          description: form.description,
+          color: form.color,
+          permissions: form.permissions
+        });
+      } else {
+        await addRole({
+          name: form.name,
+          description: form.description,
+          color: form.color,
+          permissions: form.permissions,
+          is_system: false
+        });
+      }
+      setShowForm(false);
+    } catch (err) {
+      console.error('Failed to save role:', err);
+      alert('Failed to save role. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteRole = async (roleId) => {
+    const role = roles.find(r => r.id === roleId);
+    if (role?.is_system) {
+      alert('System roles cannot be deleted');
+      return;
+    }
+    if (window.confirm('Are you sure you want to delete this role?')) {
+      try {
+        await storeDeleteRole(roleId);
+      } catch (err) {
+        console.error('Failed to delete role:', err);
+        alert('Failed to delete role. Please try again.');
+      }
+    }
+  };
+
+  if (loading?.roles) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin h-8 w-8 border-4 border-indigo-500 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Role Management</h1>
+          <p className="text-slate-500 mt-1">Define roles and configure permissions for platform access</p>
+        </div>
+        <button onClick={openCreate} className="btn btn-primary">
+          <Shield className="w-4 h-4" />
+          Create New Role
+        </button>
+      </div>
+
+      {/* Roles Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {roles.map(role => (
+          <Motion.div
+            key={role.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl border bg-white p-5 shadow-sm hover:shadow-md transition-shadow"
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${getColorClass(role.color)}`}>
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900">{role.name}</h3>
+                  {role.is_system && (
+                    <span className="text-xs text-slate-400">System Role</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button 
+                  onClick={() => openEdit(role)}
+                  className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+                {!role.is_system && (
+                  <button 
+                    onClick={() => handleDeleteRole(role.id)}
+                    className="p-2 rounded-lg hover:bg-red-50 text-slate-500 hover:text-red-600 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+            
+            <p className="text-sm text-slate-500 mb-4">{role.description}</p>
+            
+            <div className="border-t pt-3">
+              <div className="text-xs font-medium text-slate-500 mb-2">Permissions ({(role.permissions || []).length})</div>
+              <div className="flex flex-wrap gap-1.5">
+                {(role.permissions || []).slice(0, 5).map(perm => (
+                  <span key={perm} className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">
+                    {allPermissions.find(p => p.id === perm)?.label || perm}
+                  </span>
+                ))}
+                {(role.permissions || []).length > 5 && (
+                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">
+                    +{(role.permissions || []).length - 5} more
+                  </span>
+                )}
+              </div>
+            </div>
+          </Motion.div>
+        ))}
+      </div>
+
+      {/* Create/Edit Modal */}
+      <AnimatePresence>
+        {showForm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <Motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setShowForm(false)}
+            />
+            <Motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-xl"
+            >
+              {/* Modal Header */}
+              <div className="sticky top-0 flex items-center justify-between px-6 py-4 border-b bg-white z-10">
+                <h2 className="text-lg font-semibold">{editingRole ? 'Edit Role' : 'Create New Role'}</h2>
+                <button onClick={() => setShowForm(false)} className="p-2 rounded-lg hover:bg-slate-100">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6 space-y-6">
+                {/* Basic Info */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="form-label">Role Name *</label>
+                    <input
+                      className="form-input"
+                      value={form.name}
+                      onChange={e => setForm({ ...form, name: e.target.value })}
+                      placeholder="e.g., Regional Manager"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Color Theme</label>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {colorOptions.map(color => (
+                        <button
+                          key={color.id}
+                          onClick={() => setForm({ ...form, color: color.id })}
+                          className={`h-8 w-8 rounded-lg border-2 transition-all ${
+                            form.color === color.id ? 'ring-2 ring-offset-2 ring-indigo-500' : ''
+                          } ${color.class}`}
+                          title={color.label}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="form-label">Description</label>
+                  <textarea
+                    className="form-input"
+                    rows={2}
+                    value={form.description}
+                    onChange={e => setForm({ ...form, description: e.target.value })}
+                    placeholder="Brief description of this role's responsibilities"
+                  />
+                </div>
+
+                {/* Permissions */}
+                <div>
+                  <label className="form-label mb-3">Permissions</label>
+                  <div className="space-y-4">
+                    {Object.entries(permissionsByCategory).map(([category, perms]) => {
+                      const allSelected = perms.every(p => form.permissions.includes(p.id));
+                      const someSelected = perms.some(p => form.permissions.includes(p.id));
+                      
+                      return (
+                        <div key={category} className="rounded-xl border p-4">
+                          <div className="flex items-center gap-3 mb-3">
+                            <button
+                              onClick={() => toggleCategory(category)}
+                              className={`h-5 w-5 rounded border-2 flex items-center justify-center transition-colors ${
+                                allSelected ? 'bg-indigo-600 border-indigo-600' : someSelected ? 'bg-indigo-200 border-indigo-400' : 'border-slate-300'
+                              }`}
+                            >
+                              {allSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                              {someSelected && !allSelected && <div className="h-2 w-2 rounded-sm bg-indigo-600" />}
+                            </button>
+                            <span className="font-medium text-slate-900">{category}</span>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 ml-8">
+                            {perms.map(perm => (
+                              <label key={perm.id} className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={form.permissions.includes(perm.id)}
+                                  onChange={() => togglePermission(perm.id)}
+                                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <span className="text-sm text-slate-600">{perm.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="sticky bottom-0 flex items-center justify-end gap-3 px-6 py-4 border-t bg-slate-50">
+                <button onClick={() => setShowForm(false)} className="btn btn-secondary">Cancel</button>
+                <button onClick={saveRole} className="btn btn-primary">
+                  {editingRole ? 'Save Changes' : 'Create Role'}
+                </button>
+              </div>
+            </Motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ------------------------------ Settings ------------------------------
 const NEWS_CATEGORIES = ['General', 'Training', 'MOE', 'Announcements', 'Events', 'Hiring'];
 
@@ -2445,10 +3096,12 @@ export default function App(){
   return (
     <AuthProvider>
       <StoreProvider>
-        <Gate>
-          <AppShell page={page} setPage={setPage} />
-          <footer className="p-6 text-center text-xs text-slate-500">© 2025 PD Sector — MVP UI Demo</footer>
-        </Gate>
+        <ToastProvider>
+          <Gate>
+            <AppShell page={page} setPage={setPage} />
+            <footer className="p-6 text-center text-xs text-slate-500">© 2025 PD Sector — MVP UI Demo</footer>
+          </Gate>
+        </ToastProvider>
       </StoreProvider>
     </AuthProvider>
   );
@@ -2802,20 +3455,87 @@ function SignInPublic({ onBack, onForgot }){
   const [email,setEmail] = useState("");
   const [password,setPassword] = useState("");
   const [err,setErr] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function submit(e){ e.preventDefault(); setErr(""); try{ login(email.trim(), password); }catch(ex){ setErr(ex.message || "Login failed"); } }
+  async function submit(e){ 
+    e.preventDefault(); 
+    setErr(""); 
+    
+    if (!email.trim()) {
+      setErr("Please enter your email address");
+      return;
+    }
+    if (!password) {
+      setErr("Please enter your password");
+      return;
+    }
+    
+    setLoading(true);
+    try { 
+      await login(email.trim(), password); 
+    } catch(ex) { 
+      // Handle specific error messages
+      const message = ex.message || "Login failed";
+      if (message.includes("not found") || message.includes("No user")) {
+        setErr("No account found with this email address");
+      } else if (message.includes("password") || message.includes("Invalid")) {
+        setErr("Incorrect password. Please try again.");
+      } else {
+        setErr(message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="min-h-screen grid place-items-center bg-slate-50">
-      <form onSubmit={submit} className="w-[380px] rounded-2xl border bg-white p-6 shadow-sm space-y-3">
+      <form onSubmit={submit} className="w-[380px] rounded-2xl border bg-white p-6 shadow-sm space-y-4">
         <div className="text-lg font-semibold">Sign in</div>
-        <label className="text-sm block">Email<input className="mt-1 w-full rounded-xl border px-3 py-2" value={email} onChange={e=>setEmail(e.target.value)} placeholder="email@domain" /></label>
-        <label className="text-sm block">Password<input type="password" className="mt-1 w-full rounded-xl border px-3 py-2" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••" /></label>
-        {err && <div className="text-sm text-rose-600">{err}</div>}
-        <button className="w-full rounded-xl bg-slate-900 text-white px-4 py-2">Sign in</button>
+        <label className="text-sm block">
+          Email
+          <input 
+            className={`mt-1 w-full rounded-xl border px-3 py-2 ${err && !email ? 'border-rose-300 bg-rose-50' : ''}`} 
+            value={email} 
+            onChange={e=>setEmail(e.target.value)} 
+            placeholder="email@domain"
+            type="email"
+            autoComplete="email"
+          />
+        </label>
+        <label className="text-sm block">
+          Password
+          <input 
+            type="password" 
+            className={`mt-1 w-full rounded-xl border px-3 py-2 ${err && email && !password ? 'border-rose-300 bg-rose-50' : ''}`} 
+            value={password} 
+            onChange={e=>setPassword(e.target.value)} 
+            placeholder="••••••••"
+            autoComplete="current-password"
+          />
+        </label>
+        {err && (
+          <div className="flex items-center gap-2 text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {err}
+          </div>
+        )}
+        <button 
+          className="w-full rounded-xl bg-slate-900 text-white px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          disabled={loading}
+        >
+          {loading ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              Signing in...
+            </>
+          ) : 'Sign in'}
+        </button>
         <div className="flex justify-between text-xs text-slate-500">
-          <button type="button" className="underline" onClick={onBack}>← Back</button>
-          <button type="button" className="underline" onClick={onForgot}>Forgot password?</button>
+          <button type="button" className="underline hover:text-slate-700" onClick={onBack}>← Back</button>
+          <button type="button" className="underline hover:text-slate-700" onClick={onForgot}>Forgot password?</button>
         </div>
       </form>
     </div>

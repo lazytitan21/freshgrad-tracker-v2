@@ -11,6 +11,7 @@ export function StoreProvider({ children }) {
   const [candidates, setCandidates] = useState([]);
   const [courses, setCourses] = useState([]);
   const [mentors, setMentors] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [corrections, setCorrections] = useState([]);
   const [audit, setAudit] = useState([]);
@@ -21,6 +22,7 @@ export function StoreProvider({ children }) {
     candidates: true,
     courses: true,
     mentors: true,
+    roles: true,
     notifications: false,
     corrections: false,
     audit: false
@@ -195,6 +197,56 @@ export function StoreProvider({ children }) {
       console.log('✅ Deleted mentor');
     } catch (error) {
       console.error('❌ Failed to delete mentor:', error);
+      throw error;
+    }
+  }
+
+  // ========== ROLES API ==========
+  async function fetchRoles() {
+    try {
+      setLoading(prev => ({ ...prev, roles: true }));
+      const data = await api.get(API_ENDPOINTS.roles);
+      setRoles(data || []);
+      console.log('✅ Loaded roles from server');
+    } catch (error) {
+      console.error('❌ Failed to load roles:', error);
+      setRoles([]);
+    } finally {
+      setLoading(prev => ({ ...prev, roles: false }));
+    }
+  }
+
+  async function addRole(role) {
+    try {
+      const newRole = await api.post(API_ENDPOINTS.roles, role);
+      setRoles(prev => [...prev, newRole]);
+      console.log('✅ Added role');
+      return newRole;
+    } catch (error) {
+      console.error('❌ Failed to add role:', error);
+      throw error;
+    }
+  }
+
+  async function updateRole(id, patch) {
+    try {
+      const updated = await api.put(API_ENDPOINTS.roleById(id), patch);
+      setRoles(prev => prev.map(r => r.id === id ? updated : r));
+      console.log('✅ Updated role');
+      return updated;
+    } catch (error) {
+      console.error('❌ Failed to update role:', error);
+      throw error;
+    }
+  }
+
+  async function deleteRole(id) {
+    try {
+      await api.delete(API_ENDPOINTS.roleById(id));
+      setRoles(prev => prev.filter(r => r.id !== id));
+      console.log('✅ Deleted role');
+    } catch (error) {
+      console.error('❌ Failed to delete role:', error);
       throw error;
     }
   }
@@ -374,6 +426,7 @@ export function StoreProvider({ children }) {
     fetchCandidates();
     fetchCourses();
     fetchMentors();
+    fetchRoles();
     fetchNews();
   }, []);
 
@@ -435,7 +488,14 @@ export function StoreProvider({ children }) {
       fetchNews,
       addNews,
       updateNews,
-      deleteNews
+      deleteNews,
+      
+      // Roles API
+      roles,
+      fetchRoles,
+      addRole,
+      updateRole,
+      deleteRole
     }}>
       {children}
     </StoreContext.Provider>

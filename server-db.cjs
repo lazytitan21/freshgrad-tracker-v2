@@ -102,6 +102,11 @@ async function initDatabase() {
         'ALTER TABLE candidates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
         
         // Mentors table migrations
+        'ALTER TABLE mentors ADD COLUMN IF NOT EXISTS subject VARCHAR(100)',
+        'ALTER TABLE mentors ADD COLUMN IF NOT EXISTS emirate VARCHAR(100)',
+        'ALTER TABLE mentors ADD COLUMN IF NOT EXISTS experience_years INTEGER',
+        'ALTER TABLE mentors ADD COLUMN IF NOT EXISTS availability VARCHAR(100)',
+        'ALTER TABLE mentors ADD COLUMN IF NOT EXISTS notes TEXT',
         "ALTER TABLE mentors ADD COLUMN IF NOT EXISTS mentor_data JSONB DEFAULT '{}'::jsonb",
         'ALTER TABLE mentors ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
         
@@ -112,6 +117,18 @@ async function initDatabase() {
           body TEXT,
           category VARCHAR(100) DEFAULT 'general',
           author_email VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        
+        // Roles table - create if not exists
+        `CREATE TABLE IF NOT EXISTS roles (
+          id VARCHAR(100) PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          color VARCHAR(50) DEFAULT 'indigo',
+          permissions JSONB DEFAULT '[]'::jsonb,
+          is_system BOOLEAN DEFAULT false,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )`
@@ -269,16 +286,24 @@ app.get('/api/debug/schema', async (req, res) => {
 app.post('/api/users/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const result = await pool.query(
-      'SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND password = $2',
-      [email, password]
+    
+    // First check if email exists
+    const userCheck = await pool.query(
+      'SELECT * FROM users WHERE LOWER(email) = LOWER($1)',
+      [email]
     );
     
-    if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+    if (userCheck.rows.length === 0) {
+      return res.status(401).json({ error: 'No account found with this email' });
     }
     
-    const user = result.rows[0];
+    const user = userCheck.rows[0];
+    
+    // Check password
+    if (user.password !== password) {
+      return res.status(401).json({ error: 'Invalid password' });
+    }
+    
     const { password: _, ...userWithoutPassword } = user;
     
     // Merge profile_data into response for frontend compatibility
@@ -932,6 +957,147 @@ app.delete('/api/mentors/:id', async (req, res) => {
   } catch (error) {
     console.error('Delete mentor error:', error);
     res.status(500).json({ error: 'Failed to delete mentor' });
+  }
+});
+
+// ========== ROLES API ==========
+
+// Default system roles
+const DEFAULT_ROLES = [
+  { 
+    id: 'admin', 
+    name: 'Admin', 
+    description: 'Full system access with all permissions',
+    color: 'indigo',
+    permissions: ['dashboard', 'candidates', 'courses', 'import', 'results', 'graduation', 'applicants', 'exports', 'settings', 'users', 'hiring', 'enrollment', 'mentors', 'roles'],
+    is_system: true
+  },
+  { 
+    id: 'ecae-manager', 
+    name: 'ECAE Manager', 
+    description: 'Manage training programs and candidates',
+    color: 'emerald',
+    permissions: ['dashboard', 'candidates', 'courses', 'results', 'graduation', 'applicants', 'hiring', 'enrollment', 'mentors'],
+    is_system: true
+  },
+  { 
+    id: 'ecae-trainer', 
+    name: 'ECAE Trainer', 
+    description: 'Upload results and manage enrollments',
+    color: 'amber',
+    permissions: ['candidates', 'courses', 'results', 'enrollment'],
+    is_system: true
+  },
+  { 
+    id: 'auditor', 
+    name: 'Auditor', 
+    description: 'View-only access for auditing purposes',
+    color: 'slate',
+    permissions: ['dashboard', 'candidates'],
+    is_system: true
+  },
+];
+
+// Roles - Get All
+app.get('/api/roles', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM roles ORDER BY is_system DESC, name ASC');
+    
+    // If no roles exist, seed with defaults
+    if (result.rows.length === 0) {
+      console.log('📦 Seeding default roles...');
+      for (const role of DEFAULT_ROLES) {
+        await pool.query(
+          `INSERT INTO roles (id, name, description, color, permissions, is_system, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+           ON CONFLICT (id) DO NOTHING`,
+          [role.id, role.name, role.description, role.color, JSON.stringify(role.permissions), role.is_system]
+        );
+      }
+      const seeded = await pool.query('SELECT * FROM roles ORDER BY is_system DESC, name ASC');
+      console.log('✅ Default roles seeded');
+      return res.json(seeded.rows.map(r => ({ ...r, permissions: r.permissions || [] })));
+    }
+    
+    res.json(result.rows.map(r => ({ ...r, permissions: r.permissions || [] })));
+  } catch (error) {
+    console.error('Get roles error:', error);
+    res.status(500).json({ error: 'Failed to fetch roles' });
+  }
+});
+
+// Roles - Create
+app.post('/api/roles', async (req, res) => {
+  try {
+    const { name, description, color, permissions } = req.body;
+    const roleId = `role-${Date.now()}`;
+    
+    const result = await pool.query(
+      `INSERT INTO roles (id, name, description, color, permissions, is_system, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, false, NOW(), NOW())
+       RETURNING *`,
+      [roleId, name, description || '', color || 'indigo', JSON.stringify(permissions || [])]
+    );
+    
+    const role = result.rows[0];
+    console.log('✅ Role created:', role.id);
+    res.status(201).json({ ...role, permissions: role.permissions || [] });
+  } catch (error) {
+    console.error('Create role error:', error);
+    res.status(500).json({ error: 'Failed to create role' });
+  }
+});
+
+// Roles - Update
+app.put('/api/roles/:id', async (req, res) => {
+  try {
+    const { name, description, color, permissions } = req.body;
+    
+    const result = await pool.query(
+      `UPDATE roles 
+       SET name = COALESCE($2, name),
+           description = COALESCE($3, description),
+           color = COALESCE($4, color),
+           permissions = COALESCE($5, permissions),
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [req.params.id, name, description, color, permissions ? JSON.stringify(permissions) : null]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Role not found' });
+    }
+    
+    const role = result.rows[0];
+    console.log('✅ Role updated:', role.id);
+    res.json({ ...role, permissions: role.permissions || [] });
+  } catch (error) {
+    console.error('Update role error:', error);
+    res.status(500).json({ error: 'Failed to update role' });
+  }
+});
+
+// Roles - Delete
+app.delete('/api/roles/:id', async (req, res) => {
+  try {
+    // Check if system role
+    const checkResult = await pool.query('SELECT is_system FROM roles WHERE id = $1', [req.params.id]);
+    if (checkResult.rows.length > 0 && checkResult.rows[0].is_system) {
+      return res.status(403).json({ error: 'System roles cannot be deleted' });
+    }
+    
+    const result = await pool.query('DELETE FROM roles WHERE id = $1 AND is_system = false RETURNING id', [req.params.id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Role not found or is a system role' });
+    }
+    
+    console.log('✅ Role deleted:', req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete role error:', error);
+    res.status(500).json({ error: 'Failed to delete role' });
   }
 });
 

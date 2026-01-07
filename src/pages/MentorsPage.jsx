@@ -1,19 +1,59 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../providers/StoreProvider';
+import { useToast } from '../components/Toast';
+import { LoadingButton } from '../components/LoadingComponents';
+import { Plus, Search, Download, Edit2, Trash2, X, CheckCircle, Users } from 'lucide-react';
 
 export default function MentorsPage(){
   const { mentors, addMentor, updateMentor, deleteMentor } = useStore();
+  const toast = useToast();
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name:'', subject:'', email:'', contact:'', school:'', emirate:'' });
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(null);
 
   function openNew(){ setForm({ name:'', subject:'', email:'', contact:'', school:'', emirate:'' }); setEditing(null); setShowForm(true); }
   function openEdit(m){ setForm({ name:m.name||'', subject:m.subject||'', email:m.email||'', contact:m.contact||'', school:m.school||'', emirate:m.emirate||'' }); setEditing(m.id); setShowForm(true); }
-  function save(){
-    if(editing){ updateMentor(editing, form); setEditing(null); }
-    else { addMentor(form); }
-  setForm({ name:'', subject:'', email:'', contact:'', school:'', emirate:'' });
-    setShowForm(false);
+  
+  async function save(){
+    if (!form.name.trim()) {
+      toast.error('Please enter a mentor name');
+      return;
+    }
+    setSaving(true);
+    try {
+      if(editing){ 
+        await updateMentor(editing, form); 
+        toast.success('Mentor updated successfully!');
+        setEditing(null); 
+      } else { 
+        await addMentor(form); 
+        toast.success('Mentor added successfully!');
+      }
+      setForm({ name:'', subject:'', email:'', contact:'', school:'', emirate:'' });
+      setShowForm(false);
+    } catch (error) {
+      toast.error(editing ? 'Failed to update mentor' : 'Failed to add mentor');
+      console.error('Save mentor error:', error);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id) {
+    if(!window.confirm('Delete this mentor?')) return;
+    setDeleting(id);
+    try {
+      await deleteMentor(id);
+      toast.success('Mentor deleted successfully!');
+    } catch (error) {
+      toast.error('Failed to delete mentor');
+      console.error('Delete mentor error:', error);
+    } finally {
+      setDeleting(null);
+    }
   }
 
   const [q, setQ] = useState('');
@@ -51,91 +91,231 @@ export default function MentorsPage(){
   }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border bg-white p-6 shadow-sm flex items-center justify-between">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="rounded-2xl border panel bg-white p-6 shadow-sm flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="text-lg font-semibold">Mentors</div>
-          <div className="text-sm text-slate-500">Manage mentor list and contact details.</div>
+          <h1 className="text-2xl font-bold">Mentors</h1>
+          <p className="text-sm text-muted mt-1">Manage mentor list and contact details.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <input placeholder="Search mentors…" value={q} onChange={e=>setQ(e.target.value)} className="rounded-xl border px-3 py-2" />
-          <select className="rounded-xl border px-3 py-2 text-sm" value={filterSchool} onChange={e=>setFilterSchool(e.target.value)}>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input placeholder="Search mentors…" value={q} onChange={e=>setQ(e.target.value)} className="form-input pl-10 w-48" />
+          </div>
+          <select className="form-input py-2.5 text-sm" value={filterSchool} onChange={e=>setFilterSchool(e.target.value)}>
             <option value="">All schools</option>
             {schools.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          <select className="rounded-xl border px-3 py-2 text-sm" value={filterEmirate} onChange={e=>setFilterEmirate(e.target.value)}>
+          <select className="form-input py-2.5 text-sm" value={filterEmirate} onChange={e=>setFilterEmirate(e.target.value)}>
             <option value="">All emirates</option>
             {emirates.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          <select className="rounded-xl border px-3 py-2 text-sm" value={filterSubject} onChange={e=>setFilterSubject(e.target.value)}>
+          <select className="form-input py-2.5 text-sm" value={filterSubject} onChange={e=>setFilterSubject(e.target.value)}>
             <option value="">All subjects</option>
             {subjects.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          <button className="rounded-xl border px-3 py-2" onClick={exportCSV}>Export</button>
-          <button className="rounded-xl border px-3 py-2" onClick={openNew}>New mentor</button>
+          <button className="btn btn-secondary" onClick={exportCSV}>
+            <Download className="w-4 h-4" />
+            Export
+          </button>
+          <button className="btn btn-primary" onClick={openNew}>
+            <Plus className="w-4 h-4" />
+            New Mentor
+          </button>
         </div>
       </div>
 
-      <div className="rounded-2xl border bg-white p-4 shadow-sm overflow-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-3 py-2 text-center">Name</th>
-              <th className="px-3 py-2 text-center">Subject</th>
-              <th className="px-3 py-2 text-center">Email</th>
-              <th className="px-3 py-2 text-center">Contact</th>
-              <th className="px-3 py-2 text-center">School</th>
-              <th className="px-3 py-2 text-center">Emirate</th>
-              <th className="px-3 py-2 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(m => (
-              <tr key={m.id} className="border-t">
-                <td className="px-3 py-2 font-medium text-center">{m.name}</td>
-                <td className="px-3 py-2 text-center">{m.subject || '—'}</td>
-                <td className="px-3 py-2 text-center">{m.email}</td>
-                <td className="px-3 py-2 text-center">{m.contact}</td>
-                <td className="px-3 py-2 text-center">{m.school}</td>
-                <td className="px-3 py-2 text-center">{m.emirate}</td>
-                <td className="px-3 py-2 text-center">
-                  <div className="flex gap-2">
-                    <button className="rounded-lg border px-3 py-1" onClick={()=>openEdit(m)}>Edit</button>
-                    <button className="rounded-lg border px-3 py-1 text-rose-600" onClick={()=>{ if(window.confirm('Delete mentor?')) deleteMentor(m.id); }}>Delete</button>
-                  </div>
-                </td>
+      {/* Table */}
+      <div className="rounded-2xl border panel bg-white shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Subject</th>
+                <th>Email</th>
+                <th>Contact</th>
+                <th>School</th>
+                <th>Emirate</th>
+                <th className="text-center w-32">Actions</th>
               </tr>
-            ))}
-            {filtered.length===0 && (
-              <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-500">No mentors match your search.</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              <AnimatePresence>
+                {filtered.map(m => (
+                  <motion.tr 
+                    key={m.id} 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="group"
+                  >
+                    <td className="font-medium">{m.name}</td>
+                    <td>{m.subject || '—'}</td>
+                    <td className="text-indigo-600">{m.email}</td>
+                    <td>{m.contact || '—'}</td>
+                    <td>{m.school || '—'}</td>
+                    <td>{m.emirate || '—'}</td>
+                    <td className="text-center">
+                      <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          className="p-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-indigo-600 transition-colors" 
+                          onClick={() => openEdit(m)}
+                          title="Edit"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          className="p-2 rounded-lg hover:bg-red-50 text-slate-600 hover:text-red-600 transition-colors disabled:opacity-50" 
+                          onClick={() => handleDelete(m.id)}
+                          disabled={deleting === m.id}
+                          title="Delete"
+                        >
+                          {deleting === m.id ? (
+                            <div className="w-4 h-4 border-2 border-red-200 border-t-red-600 rounded-full animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    </td>
+                  </motion.tr>
+                ))}
+              </AnimatePresence>
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="text-center py-12 text-slate-500">
+                    <div className="flex flex-col items-center gap-2">
+                      <Users className="w-8 h-8 text-slate-300" />
+                      <p>No mentors match your search.</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 z-50 grid place-items-center">
-          <div className="absolute inset-0 bg-black/30" onClick={()=>setShowForm(false)} />
-          <div className="relative w-full max-w-2xl rounded-2xl bg-white border p-6 shadow-lg">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-lg font-semibold">{editing ? 'Edit mentor' : 'Add mentor'}</div>
-              <button className="rounded-xl border px-3 py-1" onClick={()=>setShowForm(false)}>Close</button>
-            </div>
-            <div className="space-y-2 text-sm">
-              <label>Name <input className="w-full rounded-xl border px-3 py-2" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} /></label>
-              <label>Subject <input className="w-full rounded-xl border px-3 py-2" value={form.subject} onChange={e=>setForm({...form,subject:e.target.value})} /></label>
-              <label>Email <input className="w-full rounded-xl border px-3 py-2" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></label>
-              <label>Contact <input className="w-full rounded-xl border px-3 py-2" value={form.contact} onChange={e=>setForm({...form,contact:e.target.value})} /></label>
-              <label>School <input className="w-full rounded-xl border px-3 py-2" value={form.school} onChange={e=>setForm({...form,school:e.target.value})} /></label>
-              <label>Emirate <input className="w-full rounded-xl border px-3 py-2" value={form.emirate} onChange={e=>setForm({...form,emirate:e.target.value})} /></label>
-              <div className="flex justify-end gap-2 mt-2">
-                <button className="rounded-xl border px-3 py-2" onClick={()=>{ setForm({ name:'', subject:'', email:'', contact:'', school:'', emirate:'' }); setEditing(null); setShowForm(false); }}>Cancel</button>
-                <button className="rounded-xl bg-indigo-600 text-white px-3 py-2" onClick={save}>{editing? 'Save' : 'Create'}</button>
+      {/* Modal Form */}
+      <AnimatePresence>
+        {showForm && (
+          <div className="fixed inset-0 z-50 grid place-items-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm" 
+              onClick={() => !saving && setShowForm(false)} 
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              className="relative w-full max-w-2xl rounded-2xl bg-white border shadow-xl overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50">
+                <h2 className="text-lg font-semibold">{editing ? 'Edit Mentor' : 'Add New Mentor'}</h2>
+                <button 
+                  className="p-2 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50" 
+                  onClick={() => setShowForm(false)}
+                  disabled={saving}
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-            </div>
+              
+              {/* Form Content */}
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="form-label">Name *</label>
+                    <input 
+                      className="form-input" 
+                      value={form.name} 
+                      onChange={e => setForm({...form, name: e.target.value})} 
+                      placeholder="Enter mentor name"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Subject</label>
+                    <input 
+                      className="form-input" 
+                      value={form.subject} 
+                      onChange={e => setForm({...form, subject: e.target.value})} 
+                      placeholder="e.g., Mathematics"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Email</label>
+                    <input 
+                      type="email"
+                      className="form-input" 
+                      value={form.email} 
+                      onChange={e => setForm({...form, email: e.target.value})} 
+                      placeholder="mentor@example.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Contact</label>
+                    <input 
+                      className="form-input" 
+                      value={form.contact} 
+                      onChange={e => setForm({...form, contact: e.target.value})} 
+                      placeholder="+971 XX XXX XXXX"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">School</label>
+                    <input 
+                      className="form-input" 
+                      value={form.school} 
+                      onChange={e => setForm({...form, school: e.target.value})} 
+                      placeholder="School name"
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Emirate</label>
+                    <input 
+                      className="form-input" 
+                      value={form.emirate} 
+                      onChange={e => setForm({...form, emirate: e.target.value})} 
+                      placeholder="e.g., Dubai"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t bg-slate-50">
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={() => { 
+                    setForm({ name:'', subject:'', email:'', contact:'', school:'', emirate:'' }); 
+                    setEditing(null); 
+                    setShowForm(false); 
+                  }}
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+                <LoadingButton 
+                  className="btn btn-primary"
+                  onClick={save}
+                  loading={saving}
+                  loadingText={editing ? 'Saving...' : 'Creating...'}
+                >
+                  {saving ? null : <CheckCircle className="w-4 h-4" />}
+                  {editing ? 'Save Changes' : 'Create Mentor'}
+                </LoadingButton>
+              </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
     </div>
   );
 }
