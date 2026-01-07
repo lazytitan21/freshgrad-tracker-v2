@@ -89,6 +89,11 @@ async function initDatabase() {
         'ALTER TABLE courses ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
         
         // Candidates table migrations
+        'ALTER TABLE candidates ADD COLUMN IF NOT EXISTS mobile VARCHAR(50)',
+        'ALTER TABLE candidates ADD COLUMN IF NOT EXISTS subject VARCHAR(100)',
+        'ALTER TABLE candidates ADD COLUMN IF NOT EXISTS emirate VARCHAR(100)',
+        'ALTER TABLE candidates ADD COLUMN IF NOT EXISTS sponsor VARCHAR(100)',
+        'ALTER TABLE candidates ADD COLUMN IF NOT EXISTS track_id VARCHAR(50)',
         "ALTER TABLE candidates ADD COLUMN IF NOT EXISTS candidate_data JSONB DEFAULT '{}'::jsonb",
         "ALTER TABLE candidates ADD COLUMN IF NOT EXISTS enrollments JSONB DEFAULT '[]'::jsonb",
         "ALTER TABLE candidates ADD COLUMN IF NOT EXISTS hiring JSONB DEFAULT '{}'::jsonb",
