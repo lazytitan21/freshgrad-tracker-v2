@@ -54,6 +54,9 @@ async function initDatabase() {
       // Add new columns if they don't exist (migration for existing databases)
       const migrations = [
         // Users table migrations
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS verified BOOLEAN DEFAULT false',
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS applicant_status VARCHAR(100) DEFAULT 'None'",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS docs JSONB DEFAULT '{}'::jsonb",
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_birth DATE',
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(20)',
         'ALTER TABLE users ADD COLUMN IF NOT EXISTS subject VARCHAR(100)',
