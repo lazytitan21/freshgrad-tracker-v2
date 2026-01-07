@@ -3,6 +3,13 @@
  * For Render.com deployment with persistent database
  */
 
+// Load environment variables from .env file (for local development)
+try {
+  require('dotenv').config();
+} catch (e) {
+  // dotenv not installed in production, that's fine
+}
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
