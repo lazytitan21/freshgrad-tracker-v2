@@ -194,7 +194,9 @@ export function AuthProvider({ children }){
   async function adminUpdateUser(email, patch){
     const e = String(email||"").toLowerCase();
     try {
-      const updated = await api.put(API_ENDPOINTS.userByEmail(e), patch);
+      // Include requesting user's email for Super Admin role assignment verification
+      const patchWithAuth = { ...patch, requestingUserEmail: user?.email };
+      const updated = await api.put(API_ENDPOINTS.userByEmail(e), patchWithAuth);
       setUsers(prev => prev.map(u => (u.email||"").toLowerCase()===e ? updated : u));
       setUser(curr => (curr && (curr.email||"").toLowerCase()===e) ? { ...curr, ...updated } : curr);
       console.log('✅ Admin updated user');
@@ -207,7 +209,7 @@ export function AuthProvider({ children }){
 
   async function adminResetPassword(email){
     const e = String(email||"").toLowerCase();
-    const temp = "moe1234";
+    const temp = "1234";
     try {
       await api.post(API_ENDPOINTS.userByEmail(e) + '/password', { password: temp });
       setUsers(prev => prev.map(u => (u.email || "").toLowerCase() === e ? { ...u, password: temp } : u));
@@ -258,7 +260,7 @@ export function AuthProvider({ children }){
 
   // Load all users on mount (for admin users)
   useEffect(() => {
-    if (user?.role === 'Admin') {
+    if (user?.role === 'Admin' || user?.role === 'Super Admin') {
       fetchAllUsers().catch(err => console.error('Failed to load users:', err));
     }
   }, [user?.role]);

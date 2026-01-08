@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../providers/StoreProvider';
 import { useToast } from '../components/Toast';
+import { useConfirm } from '../components/ui/ConfirmDialog';
 import { LoadingButton } from '../components/LoadingComponents';
 import { Plus, Search, Download, Edit2, Trash2, X, CheckCircle, Users } from 'lucide-react';
 
 export default function MentorsPage(){
   const { mentors, addMentor, updateMentor, deleteMentor } = useStore();
   const toast = useToast();
+  const { confirmDelete } = useConfirm();
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name:'', subject:'', email:'', contact:'', school:'', emirate:'' });
@@ -43,7 +45,8 @@ export default function MentorsPage(){
   }
 
   async function handleDelete(id) {
-    if(!window.confirm('Delete this mentor?')) return;
+    const confirmed = await confirmDelete("this mentor");
+    if (!confirmed) return;
     setDeleting(id);
     try {
       await deleteMentor(id);

@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../providers/AuthProvider";
 import { useStore } from "../providers/StoreProvider";
+import { useToast } from "./Toast";
+import { useConfirm } from "./ui/ConfirmDialog";
 import { requiredCoursesForTrack, courseByCode, computeCurrentAverage, coursePassed, trackNameById, TRACKS } from "../utils/helpers";
 
 function MentorSelect({ intern, onChange }){
@@ -32,6 +34,8 @@ function Section({ title, children }){ return (<div className="mt-6"><div classN
 
 function CandidateDrawer({ open, onClose, candidate, role, generateCandidatePDF, logEvent, notify }){
   const { user, users } = useAuth();
+  const toast = useToast();
+  const { confirm, confirmDelete } = useConfirm();
   const currentName = user?.name || user?.email || "User";
   const { candidates: _candidates, setCandidates, updateCandidate: updateCandidateAPI, syncCandidate, corrections, setCorrections, courses } = useStore();
 
@@ -105,7 +109,7 @@ function CandidateDrawer({ open, onClose, candidate, role, generateCandidatePDF,
   const otherCourses = (courses||[]).filter(c => c.active!==false && (!c.tracks?.includes(candidate.trackId) || !c.isRequired));
 
   function doPDF(){
-    generateCandidatePDF(candidate, courses, currentName);
+    generateCandidatePDF(candidate, courses, currentName, (err) => toast.error(err));
     try { logEvent?.("candidate_pdf_generated",{ id:candidate.id, ts:new Date().toISOString() }); } catch (e) { void e; }
   }
 
@@ -118,12 +122,26 @@ function CandidateDrawer({ open, onClose, candidate, role, generateCandidatePDF,
   function changeStatus(s){ updateCandidate({ status:s }); try { logEvent?.("candidate_status_changed",{ id:candidate.id, status:s, ts:new Date().toISOString() }); } catch (e) { void e; } }
 
   function addEnrollment(){
-    if(!enr.code){ alert("Select a course."); return; }
+    if(!enr.code){ toast.error("Select a course."); return; }
     const course = courseByCode(courses, enr.code);
     const newItem={ id:`ENR-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, code:enr.code, title:course?.title||enr.code, cohort:(enr.cohort||"").trim(), startDate:enr.startDate||"", endDate:enr.endDate||"", status:"Enrolled", assignedBy:currentName, assignedTs:new Date().toISOString() };
     const list=Array.isArray(candidate.enrollments)?candidate.enrollments.slice():[];
     if(list.some(x=>x.code===newItem.code && x.status!=="Withdrawn")){
-      if(!window.confirm("This course is already assigned (or active). Add another anyway?")) return;
+      confirm({
+        title: "Course Already Assigned",
+        message: "This course is already assigned (or active). Add another anyway?",
+        confirmText: "Add Anyway",
+        type: "warning"
+      }).then(confirmed => {
+        if (confirmed) {
+          list.unshift(newItem);
+          const nextStatus = (candidate.status==="Imported"||candidate.status==="Eligible") ? "Assigned" : candidate.status;
+          updateCandidate({ enrollments:list, status:nextStatus });
+          setEnr({ code:"", cohort:"", startDate:"", endDate:"" });
+          try { logEvent?.("enrollment_added",{ candidateId:candidate.id, code:newItem.code, ts:newItem.assignedTs }); } catch (e) { void e; }
+        }
+      });
+      return;
     }
     list.unshift(newItem);
     const nextStatus = (candidate.status==="Imported"||candidate.status==="Eligible") ? "Assigned" : candidate.status;
@@ -132,7 +150,13 @@ function CandidateDrawer({ open, onClose, candidate, role, generateCandidatePDF,
     try { logEvent?.("enrollment_added",{ candidateId:candidate.id, code:newItem.code, ts:newItem.assignedTs }); } catch (e) { void e; }
   }
   function updateEnrollment(id, patch){ const list=(candidate.enrollments||[]).map(x=>x.id===id?{...x,...patch}:x); updateCandidate({ enrollments:list }); try { logEvent?.("enrollment_updated",{ candidateId:candidate.id, id, ts:new Date().toISOString() }); } catch (e) { void e; } }
-  function removeEnrollment(id){ if(!window.confirm("Remove this enrollment?")) return; const list=(candidate.enrollments||[]).filter(x=>x.id!==id); updateCandidate({ enrollments:list }); try { logEvent?.("enrollment_removed",{ candidateId:candidate.id, id, ts:new Date().toISOString() }); } catch (e) { void e; } }
+  async function removeEnrollment(id){ 
+    const confirmed = await confirmDelete("enrollment");
+    if(!confirmed) return; 
+    const list=(candidate.enrollments||[]).filter(x=>x.id!==id); 
+    updateCandidate({ enrollments:list }); 
+    try { logEvent?.("enrollment_removed",{ candidateId:candidate.id, id, ts:new Date().toISOString() }); } catch (e) { void e; } 
+  }
 
   const _candidateCorrections = corrections.filter(c=>c.candidateId===candidate.id);
   const _pendingForTrainer = _candidateCorrections.filter(c=>c.forRole==="ECAE Trainer" && c.status==="Pending");
@@ -142,7 +166,7 @@ function CandidateDrawer({ open, onClose, candidate, role, generateCandidatePDF,
     const item={ id:`CR-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, candidateId:candidate.id, by:currentName, role, forRole:"Admin", text, status:"Pending", ts:new Date().toISOString() };
     setCorrections(prev=>[item,...prev]); setCorrectionText(""); try { logEvent?.("correction_submitted",{ candidateId:candidate.id, by:item.by, role:item.role, ts:item.ts }); } catch (e) { void e; }
     try { notify?.({ role:"Admin" }, { type:"correction_requested", title:`Data correction: ${candidate.id}`, body: text, targetRef:{ page:"candidates", candidateId: candidate.id } }); } catch (e) { void e; }
-    alert("Correction submitted (Pending).");
+    toast.success("Correction submitted (Pending).");
   }
   function _resolveCorrection(id){ setCorrections(prev=>prev.map(x=>x.id===id?{...x,status:"Resolved",resolvedTs:new Date().toISOString()}:x)); try { logEvent?.("correction_resolved",{ id, candidateId:candidate.id, ts:new Date().toISOString() }); } catch (e) { void e; }
     try { notify?.({ role:"ECAE Trainer" }, { type:"correction_resolved", title:`Request resolved: ${candidate.id}`, body:"Admin marked your request as Resolved.", targetRef:{ page:"candidates", candidateId: candidate.id } }); } catch (e) { void e; }
@@ -328,7 +352,7 @@ function CandidateDrawer({ open, onClose, candidate, role, generateCandidatePDF,
             </Section>
 
             <Section title="Data Corrections / Clarifications">
-              {role==="Admin" ? (
+              {(role==="Admin" || role==="Super Admin") ? (
                 <div className="space-y-3"><div className="rounded-2xl border p-3"><div className="font-medium mb-2">Requests</div><div className="text-sm text-slate-500">(moved to parent)</div></div></div>
               ) : (
                 <div className="space-y-3"><div className="rounded-2xl border p-3"> <div className="font-medium mb-2">Clarifications</div><div className="text-sm text-slate-500">(moved to parent)</div></div></div>

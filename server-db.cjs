@@ -129,9 +129,13 @@ async function initDatabase() {
           color VARCHAR(50) DEFAULT 'indigo',
           permissions JSONB DEFAULT '[]'::jsonb,
           is_system BOOLEAN DEFAULT false,
+          is_protected BOOLEAN DEFAULT false,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`
+        )`,
+        
+        // Add is_protected column if it doesn't exist
+        `ALTER TABLE roles ADD COLUMN IF NOT EXISTS is_protected BOOLEAN DEFAULT false`
       ];
       
       for (const migration of migrations) {
@@ -404,7 +408,29 @@ app.get('/api/users/:email', async (req, res) => {
 app.put('/api/users/:email', async (req, res) => {
   try {
     // Extract known fields and store rest in profile_data
-    const { name, role, applicantStatus, applicant_status, docs, interested, candidateId, ...otherFields } = req.body;
+    const { name, role, applicantStatus, applicant_status, docs, interested, candidateId, requestingUserEmail, ...otherFields } = req.body;
+    
+    // Protect Super Admin role assignment - only Super Admins can assign this role
+    if (role === 'Super Admin') {
+      // Check if the requesting user is a Super Admin
+      if (requestingUserEmail) {
+        const requestingUser = await pool.query('SELECT role FROM users WHERE LOWER(email) = LOWER($1)', [requestingUserEmail]);
+        if (requestingUser.rows.length === 0 || requestingUser.rows[0].role !== 'Super Admin') {
+          return res.status(403).json({ error: 'Only Super Admin can assign Super Admin role' });
+        }
+      } else {
+        return res.status(403).json({ error: 'Super Admin role assignment requires authentication' });
+      }
+    }
+    
+    // Prevent changing the primary Super Admin's role to something else
+    const checkUser = await pool.query('SELECT role FROM users WHERE LOWER(email) = LOWER($1)', [req.params.email]);
+    if (checkUser.rows.length > 0 && checkUser.rows[0].role === 'Super Admin' && role && role !== 'Super Admin') {
+      // Only allow if target is primary Super Admin (cannot change)
+      if (req.params.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
+        return res.status(403).json({ error: 'Primary Super Admin role cannot be changed' });
+      }
+    }
     
     // Build profile_data from all the profile fields sent by frontend
     // This includes: dob, gender, preferredSubject, emirate, contactNumber, 
@@ -443,6 +469,27 @@ app.put('/api/users/:email', async (req, res) => {
   } catch (error) {
     console.error('Update user error:', error);
     res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// Special endpoint to initialize Super Admin (run once)
+app.post('/api/init-super-admin', async (req, res) => {
+  try {
+    // Update the designated Super Admin email to have Super Admin role
+    const result = await pool.query(
+      `UPDATE users SET role = 'Super Admin' WHERE LOWER(email) = LOWER($1) RETURNING email, role`,
+      [SUPER_ADMIN_EMAIL]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Super Admin user not found. Make sure you have registered with this email.' });
+    }
+    
+    console.log('✅ Super Admin initialized:', SUPER_ADMIN_EMAIL);
+    res.json({ success: true, message: 'Super Admin role activated', email: result.rows[0].email });
+  } catch (error) {
+    console.error('Init Super Admin error:', error);
+    res.status(500).json({ error: 'Failed to initialize Super Admin' });
   }
 });
 
@@ -962,14 +1009,26 @@ app.delete('/api/mentors/:id', async (req, res) => {
 
 // ========== ROLES API ==========
 
+// Super Admin email - cannot be changed or have role modified
+const SUPER_ADMIN_EMAIL = 'firas.kiftaro@moe.gov.ae';
+
 // Default system roles
 const DEFAULT_ROLES = [
+  { 
+    id: 'super-admin', 
+    name: 'Super Admin', 
+    description: 'Supreme system administrator with irrevocable permissions',
+    color: 'rose',
+    permissions: ['dashboard', 'candidates', 'courses', 'import', 'results', 'graduation', 'applicants', 'exports', 'reports', 'settings', 'users', 'hiring', 'enrollment', 'mentors', 'roles'],
+    is_system: true,
+    is_protected: true  // Cannot be edited or deleted
+  },
   { 
     id: 'admin', 
     name: 'Admin', 
     description: 'Full system access with all permissions',
     color: 'indigo',
-    permissions: ['dashboard', 'candidates', 'courses', 'import', 'results', 'graduation', 'applicants', 'exports', 'settings', 'users', 'hiring', 'enrollment', 'mentors', 'roles'],
+    permissions: ['dashboard', 'candidates', 'courses', 'import', 'results', 'graduation', 'applicants', 'exports', 'reports', 'settings', 'users', 'hiring', 'enrollment', 'mentors', 'roles'],
     is_system: true
   },
   { 
@@ -977,7 +1036,7 @@ const DEFAULT_ROLES = [
     name: 'ECAE Manager', 
     description: 'Manage training programs and candidates',
     color: 'emerald',
-    permissions: ['dashboard', 'candidates', 'courses', 'results', 'graduation', 'applicants', 'hiring', 'enrollment', 'mentors'],
+    permissions: ['dashboard', 'candidates', 'courses', 'results', 'graduation', 'applicants', 'reports', 'hiring', 'enrollment', 'mentors'],
     is_system: true
   },
   { 
@@ -1007,11 +1066,14 @@ app.get('/api/roles', async (req, res) => {
     if (result.rows.length === 0) {
       console.log('📦 Seeding default roles...');
       for (const role of DEFAULT_ROLES) {
-        await pool.query(
-          `INSERT INTO roles (id, name, description, color, permissions, is_system, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-           ON CONFLICT (id) DO NOTHING`,
-          [role.id, role.name, role.description, role.color, JSON.stringify(role.permissions), role.is_system]
+        await pool.query(`
+          INSERT INTO roles (id, name, description, color, permissions, is_system, is_protected, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+           ON CONFLICT (id) DO UPDATE SET
+             permissions = $5,
+             is_protected = $7,
+             updated_at = NOW()`,
+          [role.id, role.name, role.description, role.color, JSON.stringify(role.permissions), role.is_system, role.is_protected || false]
         );
       }
       const seeded = await pool.query('SELECT * FROM roles ORDER BY is_system DESC, name ASC');
@@ -1023,6 +1085,47 @@ app.get('/api/roles', async (req, res) => {
   } catch (error) {
     console.error('Get roles error:', error);
     res.status(500).json({ error: 'Failed to fetch roles' });
+  }
+});
+
+// Ensure Super Admin role exists - run on startup or call via API
+app.post('/api/roles/init-super-admin', async (req, res) => {
+  try {
+    // Check if Super Admin role exists
+    const check = await pool.query("SELECT id FROM roles WHERE id = 'super-admin'");
+    
+    if (check.rows.length === 0) {
+      // Create the Super Admin role
+      const superAdminRole = DEFAULT_ROLES.find(r => r.id === 'super-admin');
+      await pool.query(
+        `INSERT INTO roles (id, name, description, color, permissions, is_system, is_protected, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())`,
+        [superAdminRole.id, superAdminRole.name, superAdminRole.description, superAdminRole.color, 
+         JSON.stringify(superAdminRole.permissions), superAdminRole.is_system, superAdminRole.is_protected]
+      );
+      console.log('✅ Super Admin role created');
+    } else {
+      // Update is_protected flag for existing Super Admin role
+      await pool.query(
+        `UPDATE roles SET is_protected = true WHERE id = 'super-admin'`
+      );
+      console.log('✅ Super Admin role already exists, ensured is_protected=true');
+    }
+    
+    // Update the Super Admin user's role
+    const userUpdate = await pool.query(
+      `UPDATE users SET role = 'Super Admin' WHERE LOWER(email) = LOWER($1) RETURNING email, role`,
+      [SUPER_ADMIN_EMAIL]
+    );
+    
+    if (userUpdate.rows.length > 0) {
+      console.log('✅ Super Admin user role updated:', SUPER_ADMIN_EMAIL);
+    }
+    
+    res.json({ success: true, message: 'Super Admin role initialized' });
+  } catch (error) {
+    console.error('Init Super Admin role error:', error);
+    res.status(500).json({ error: 'Failed to initialize Super Admin role' });
   }
 });
 
@@ -1051,7 +1154,23 @@ app.post('/api/roles', async (req, res) => {
 // Roles - Update
 app.put('/api/roles/:id', async (req, res) => {
   try {
-    const { name, description, color, permissions } = req.body;
+    const { name, description, color, permissions, requestingUserEmail } = req.body;
+    
+    // Check if this is a protected role (Super Admin)
+    const checkProtected = await pool.query('SELECT is_protected, name FROM roles WHERE id = $1', [req.params.id]);
+    if (checkProtected.rows.length > 0 && checkProtected.rows[0].is_protected) {
+      // Allow Super Admin to edit protected roles
+      if (requestingUserEmail) {
+        const requestingUser = await pool.query('SELECT role FROM users WHERE LOWER(email) = LOWER($1)', [requestingUserEmail]);
+        if (requestingUser.rows.length === 0 || requestingUser.rows[0].role !== 'Super Admin') {
+          return res.status(403).json({ error: 'Only Super Admin can modify protected roles' });
+        }
+        // Super Admin can proceed - update the protected role
+        console.log('✅ Super Admin updating protected role:', checkProtected.rows[0].name);
+      } else {
+        return res.status(403).json({ error: 'This role is protected and cannot be modified' });
+      }
+    }
     
     const result = await pool.query(
       `UPDATE roles 
@@ -1081,16 +1200,21 @@ app.put('/api/roles/:id', async (req, res) => {
 // Roles - Delete
 app.delete('/api/roles/:id', async (req, res) => {
   try {
-    // Check if system role
-    const checkResult = await pool.query('SELECT is_system FROM roles WHERE id = $1', [req.params.id]);
-    if (checkResult.rows.length > 0 && checkResult.rows[0].is_system) {
-      return res.status(403).json({ error: 'System roles cannot be deleted' });
+    // Check if system role or protected role
+    const checkResult = await pool.query('SELECT is_system, is_protected FROM roles WHERE id = $1', [req.params.id]);
+    if (checkResult.rows.length > 0) {
+      if (checkResult.rows[0].is_protected) {
+        return res.status(403).json({ error: 'This role is protected and cannot be deleted' });
+      }
+      if (checkResult.rows[0].is_system) {
+        return res.status(403).json({ error: 'System roles cannot be deleted' });
+      }
     }
     
-    const result = await pool.query('DELETE FROM roles WHERE id = $1 AND is_system = false RETURNING id', [req.params.id]);
+    const result = await pool.query('DELETE FROM roles WHERE id = $1 AND is_system = false AND (is_protected IS NULL OR is_protected = false) RETURNING id', [req.params.id]);
     
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Role not found or is a system role' });
+      return res.status(404).json({ error: 'Role not found or is protected' });
     }
     
     console.log('✅ Role deleted:', req.params.id);

@@ -1,10 +1,13 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
+import ReactDOM from "react-dom";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
-import { Workflow, Home, Users, BookOpen, ClipboardList, FilePlus, UploadCloud, GraduationCap, Download, UserPlus, Briefcase, User, Settings, Sun, Moon, AlertTriangle, Clock, TrendingUp, TrendingDown, Award, ChevronDown, ChevronRight, Shield } from "lucide-react";
+import { Workflow, Home, Users, BookOpen, ClipboardList, FilePlus, UploadCloud, GraduationCap, Download, UserPlus, Briefcase, User, Settings, Sun, Moon, AlertTriangle, Clock, TrendingUp, TrendingDown, Award, ChevronDown, ChevronRight, ChevronLeft, Shield, BarChart3, Menu, X } from "lucide-react";
 import { AuthProvider, useAuth } from "./providers/AuthProvider";
 import { StoreProvider, useStore } from "./providers/StoreProvider";
 import { ToastProvider, useToast } from "./components/Toast";
+import { ConfirmProvider, useConfirm } from "./components/ui/ConfirmDialog";
+import { SkeletonDashboard, SkeletonCandidatesPage, SkeletonTable } from "./components/ui/Skeleton";
 import MentorsPage from "./pages/MentorsPage";
 
 /* FreshGrad Training Tracker — Courses Catalog + Assignments + Corrections + Charts + Candidate PDF + Courses Exports */
@@ -78,9 +81,14 @@ function drawSimpleTimeline(doc, x, y, width, steps, currentIdx) {
 
 
 /* ---------- Candidate PDF helper ---------- */
-function generateCandidatePDF(candidate, courses, userName){
+function generateCandidatePDF(candidate, courses, userName, onError){
   const jsPDF = window.jspdf?.jsPDF || window.jsPDF?.jsPDF;
-  if (!jsPDF) { alert("PDF export requires jsPDF + AutoTable. Add the CDN scripts in index.html."); return; }
+  if (!jsPDF) { 
+    const msg = "PDF export requires jsPDF + AutoTable. Add the CDN scripts in index.html.";
+    if (typeof onError === 'function') onError(msg);
+    else console.error(msg);
+    return false;
+  }
   const doc = new jsPDF("p","pt","a4");
   const pageW = doc.internal.pageSize.getWidth();
   const margin = 36;
@@ -308,45 +316,58 @@ const NAV_SECTIONS = [
   {
     id: 'overview',
     label: 'Overview',
+    icon: 'Home',
     items: [
-      { id: 'dashboard', label: 'Dashboard', icon: 'Home' },
+      { id: 'dashboard', label: 'Dashboard' },
     ]
   },
   {
     id: 'people',
-    label: 'People Management',
+    label: 'People',
+    icon: 'Users',
     items: [
-      { id: 'candidates', label: 'Candidates', icon: 'Users' },
-      { id: 'applicants', label: 'Applicants', icon: 'UserPlus' },
-      { id: 'mentors', label: 'Mentors', icon: 'GraduationCap' },
-      { id: 'users', label: 'Platform Users', icon: 'User' },
+      { id: 'candidates', label: 'Candidates' },
+      { id: 'applicants', label: 'Applicants' },
+      { id: 'mentors', label: 'Mentors' },
+      { id: 'users', label: 'Platform Users' },
     ]
   },
   {
     id: 'training',
-    label: 'Training & Courses',
+    label: 'Training',
+    icon: 'BookOpen',
     items: [
-      { id: 'courses', label: 'Course Catalog', icon: 'BookOpen' },
-      { id: 'enrollment', label: 'Enrollment', icon: 'ClipboardList' },
-      { id: 'results', label: 'Upload Results', icon: 'UploadCloud' },
+      { id: 'courses', label: 'Course Catalog' },
+      { id: 'enrollment', label: 'Enrollment' },
+      { id: 'results', label: 'Upload Results' },
     ]
   },
   {
     id: 'workflow',
     label: 'Workflow',
+    icon: 'Briefcase',
     items: [
-      { id: 'import', label: 'Import Data', icon: 'FilePlus' },
-      { id: 'graduation', label: 'Graduation Review', icon: 'Award' },
-      { id: 'hiring', label: 'Hiring Tracker', icon: 'Briefcase' },
+      { id: 'import', label: 'Import Data' },
+      { id: 'graduation', label: 'Graduation Review' },
+      { id: 'hiring', label: 'Hiring Tracker' },
+    ]
+  },
+  {
+    id: 'analytics',
+    label: 'Analytics',
+    icon: 'BarChart3',
+    items: [
+      { id: 'reports', label: 'Reports & Analytics' },
+      { id: 'exports', label: 'Data Exports' },
     ]
   },
   {
     id: 'system',
     label: 'System',
+    icon: 'Settings',
     items: [
-      { id: 'exports', label: 'Reports & Exports', icon: 'Download' },
-      { id: 'roles', label: 'Role Management', icon: 'Shield' },
-      { id: 'settings', label: 'Settings', icon: 'Settings' },
+      { id: 'roles', label: 'Role Management' },
+      { id: 'settings', label: 'Landing Page Updates' },
     ]
   },
 ];
@@ -354,8 +375,12 @@ const NAV_SECTIONS = [
 // Flat NAV for backward compatibility
 const NAV = NAV_SECTIONS.flatMap(section => section.items.map(item => ({ id: item.id, label: item.label })));
 
-const ROLES = ["Admin","ECAE Manager","ECAE Trainer","Auditor","Student"];
+// Super Admin email - hardcoded for maximum protection
+const SUPER_ADMIN_EMAIL = 'firas.kiftaro@moe.gov.ae';
+
+const ROLES = ["Super Admin","Admin","ECAE Manager","ECAE Trainer","Auditor","Student"];
 const ROLE_PERMISSIONS = {
+  "Super Admin":["dashboard","candidates","courses","import","results","graduation","applicants","exports","settings","users","hiring","enrollment","mentors","roles"],
   Admin:["dashboard","candidates","courses","import","results","graduation","applicants","exports","settings","users","hiring","enrollment","mentors","roles"],
   "ECAE Manager":["dashboard","candidates","courses","results","graduation","applicants","hiring","enrollment","mentors"],
   "ECAE Trainer":["candidates","courses","results","enrollment"],
@@ -377,11 +402,32 @@ const HIRING_STAGES = [
 
 function TopBar(){
   const { user } = useAuth();
-  const { notificationsFor, markRead, markAllReadFor, setUserName } = useStore();
+  const { notificationsFor, markRead, markAllReadFor, setUserName, roles } = useStore();
   const [open,setOpen]=useState(false);
   const [dark, setDark] = useState(() => {
     try { return localStorage.getItem('fg_theme') === 'dark'; } catch(err){ void err; return false; }
   });
+
+  // Role color options (same as RoleManagementPage)
+  const colorOptions = [
+    { id: 'indigo', label: 'Indigo', class: 'bg-indigo-100 text-indigo-700' },
+    { id: 'emerald', label: 'Emerald', class: 'bg-emerald-100 text-emerald-700' },
+    { id: 'amber', label: 'Amber', class: 'bg-amber-100 text-amber-700' },
+    { id: 'rose', label: 'Rose', class: 'bg-rose-100 text-rose-700' },
+    { id: 'sky', label: 'Sky', class: 'bg-sky-100 text-sky-700' },
+    { id: 'violet', label: 'Violet', class: 'bg-violet-100 text-violet-700' },
+    { id: 'slate', label: 'Slate', class: 'bg-slate-200 text-slate-700' },
+  ];
+  
+  // Check if user is Super Admin
+  const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL || user?.role === 'Super Admin';
+  
+  // Get the user's role color from the roles in store
+  const userRoleData = roles.find(r => r.name === user?.role || r.id === user?.role);
+  // Super Admin gets a special gradient badge, others get their role color
+  const roleColorClass = isSuperAdmin 
+    ? 'bg-gradient-to-r from-rose-500 to-purple-600 text-white' 
+    : (colorOptions.find(c => c.id === userRoleData?.color)?.class || 'bg-slate-200 text-slate-700');
 
   useEffect(()=>{
     try{ localStorage.setItem('fg_theme', dark ? 'dark' : 'light'); }catch(err){ void err; }
@@ -397,8 +443,17 @@ function TopBar(){
   return (
   <div className="sticky top-0 z-40 bg-white/90 panel backdrop-blur border-b">
       <div className="px-4 md:px-8 py-3 flex items-center gap-3">
-        <div/>
-        <div className="font-semibold mr-auto flex items-center gap-2">
+        {/* App Logo and Title */}
+        <div className="flex items-center gap-3 mr-auto">
+          <div className="rounded-xl bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 flex items-center justify-center shadow-lg h-10 w-10">
+            <svg className="text-white w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 4h6v6H3z M15 4h6v6h-6z M15 14h6v6h-6z M9 7h6 M9 7v10 M15 7v7" />
+            </svg>
+          </div>
+          <div className="hidden sm:flex flex-col">
+            <div className="font-bold text-lg leading-tight text-slate-900">Talent Tracker</div>
+            <div className="text-xs text-slate-500 font-medium">MOE Professional Development</div>
+          </div>
         </div>
 
         {/* Theme toggle as animated switch (div[role=switch] to avoid native button focus rectangle) */}
@@ -466,7 +521,7 @@ function TopBar(){
               <div className="flex flex-col items-center">
             <div className="text-sm text-slate-600 dark:text-slate-200">{user?.name || user?.email}</div>
               <div>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-100"><b>{user?.role}</b></span>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${roleColorClass}`}>{user?.role}</span>
               </div>
           </div>
           <SignOutButton />
@@ -490,28 +545,60 @@ function AppShell({ page, setPage }) {
   
   // Fallback permissions while roles are loading from database
   const FALLBACK_PERMISSIONS = {
-    Admin: ["dashboard","candidates","courses","import","results","graduation","applicants","exports","settings","users","hiring","enrollment","mentors","roles"],
-    "ECAE Manager": ["dashboard","candidates","courses","results","graduation","applicants","hiring","enrollment","mentors"],
+    "Super Admin": ["dashboard","candidates","courses","import","results","graduation","applicants","exports","reports","settings","users","hiring","enrollment","mentors","roles"],
+    Admin: ["dashboard","candidates","courses","import","results","graduation","applicants","exports","reports","settings","users","hiring","enrollment","mentors","roles"],
+    "ECAE Manager": ["dashboard","candidates","courses","results","graduation","applicants","reports","hiring","enrollment","mentors"],
     "ECAE Trainer": ["candidates","courses","results","enrollment"],
-    Auditor: ["dashboard","candidates"],
+    Auditor: ["dashboard","candidates","reports"],
   };
   
+  // Super Admin override - if email matches, always get full permissions
+  const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
+  
   // Get permissions from database roles, fallback to hardcoded while loading
+  // Super Admin always gets all permissions regardless of database state
   const roleData = roles.find(r => r.name === userRole || r.id === userRole);
-  const allowed = roleData?.permissions || FALLBACK_PERMISSIONS[userRole] || [];
+  const allowed = isSuperAdmin 
+    ? ["dashboard","candidates","courses","import","results","graduation","applicants","exports","reports","settings","users","hiring","enrollment","mentors","roles"]
+    : (roleData?.permissions || FALLBACK_PERMISSIONS[userRole] || []);
   
-  // Track expanded sections
-  const [expandedSections, setExpandedSections] = useState(() => {
-    // Start with all sections collapsed
-    return [];
-  });
+  // Sidebar collapsed state - collapsed by default
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   
-  const toggleSection = (sectionId) => {
-    setExpandedSections(prev => 
-      prev.includes(sectionId) 
-        ? prev.filter(id => id !== sectionId)
-        : [...prev, sectionId]
-    );
+  // Track open section for showing dropdown (click-based)
+  const [openSection, setOpenSection] = useState(null);
+  
+  // Track dropdown position for portal rendering
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 88 });
+  
+  // Timeout ref for delayed close
+  const closeTimeoutRef = useRef(null);
+  
+  // Handle opening dropdown with position
+  const handleSectionHover = (sectionId, e) => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    setDropdownPos({ top: rect.top, left: rect.right + 8 });
+    setOpenSection(sectionId);
+  };
+  
+  // Handle closing dropdown with delay
+  const handleSectionLeave = () => {
+    closeTimeoutRef.current = setTimeout(() => {
+      setOpenSection(null);
+    }, 150); // 150ms delay gives time to move to dropdown
+  };
+  
+  // Cancel close when entering dropdown
+  const handleDropdownEnter = (sectionId) => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+    setOpenSection(sectionId);
   };
 
   // Provide app-level selection for candidate drawer
@@ -521,139 +608,380 @@ function AppShell({ page, setPage }) {
   const selected = React.useMemo(() => (Array.isArray(candidates) ? candidates.find(c => String(c.id) === String(selectedId)) : null), [candidates, selectedId]);
   const editCandidate = React.useMemo(() => (Array.isArray(candidates) ? candidates.find(c => String(c.id) === String(editCandidateId)) : null), [candidates, editCandidateId]);
 
-  // Icon mapping
+  // Mobile sidebar state
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
+  // Close mobile menu on page change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [page]);
+
+  // Icon mapping for sections
   const ICONS = {
     Home, Users, BookOpen, ClipboardList, FilePlus, UploadCloud, 
-    GraduationCap, Download, UserPlus, Briefcase, User, Settings, Award, Shield
+    GraduationCap, Download, UserPlus, Briefcase, User, Settings, Award, Shield, BarChart3, Menu, X
   };
+
+  // Reusable navigation content for both desktop and mobile
+  const NavContent = ({ isMobile = false }) => (
+    <>
+      {NAV_SECTIONS.map((section) => {
+        const visibleItems = section.items.filter(item => allowed.includes(item.id));
+        if (visibleItems.length === 0) return null;
+        
+        const hasActiveItem = visibleItems.some(item => item.id === page);
+        const SectionIcon = ICONS[section.icon] || Home;
+        const isOpen = openSection === section.id;
+        
+        return (
+          <div 
+            key={section.id} 
+            data-section-id={section.id}
+            className="mb-1 relative"
+            onMouseEnter={(e) => !isMobile && sidebarCollapsed && handleSectionHover(section.id, e)}
+            onMouseLeave={() => !isMobile && sidebarCollapsed && handleSectionLeave()}
+          >
+            <button
+              onClick={() => {
+                if (visibleItems.length === 1) {
+                  setPage(visibleItems[0].id);
+                  if (isMobile) setMobileMenuOpen(false);
+                } else if (isMobile || !sidebarCollapsed) {
+                  setOpenSection(isOpen ? null : section.id);
+                }
+              }}
+              className={classNames(
+                "w-full flex items-center gap-3 rounded-xl transition-all duration-200",
+                isMobile ? "px-4 py-3" : (sidebarCollapsed ? "p-3 justify-center" : "px-4 py-3"),
+                hasActiveItem 
+                  ? "bg-indigo-100 text-indigo-700" 
+                  : "text-slate-600 hover:bg-white hover:text-slate-900 hover:shadow-sm"
+              )}
+            >
+              <div className={classNames(
+                "flex items-center justify-center rounded-lg transition-colors",
+                isMobile ? "h-9 w-9" : (sidebarCollapsed ? "h-8 w-8" : "h-9 w-9"),
+                hasActiveItem 
+                  ? "bg-indigo-200 text-indigo-700" 
+                  : "bg-slate-100 text-slate-500"
+              )}>
+                <SectionIcon className={isMobile || !sidebarCollapsed ? "h-5 w-5" : "h-4 w-4"} />
+              </div>
+              {(isMobile || !sidebarCollapsed) && (
+                <>
+                  <span className="flex-1 text-left font-medium text-sm">{section.label}</span>
+                  {visibleItems.length > 1 && (
+                    <Motion.div
+                      animate={{ rotate: isOpen ? 90 : 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronRight className="h-4 w-4 text-slate-400" />
+                    </Motion.div>
+                  )}
+                </>
+              )}
+            </button>
+            
+            {/* Inline dropdown for expanded/mobile */}
+            {(isMobile || !sidebarCollapsed) && (
+              <AnimatePresence>
+                {isOpen && visibleItems.length > 1 && (
+                  <Motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden mt-1 ml-4 border-l-2 border-slate-200 pl-4"
+                  >
+                    {visibleItems.map(item => {
+                      const isActive = page === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setPage(item.id);
+                            if (isMobile) setMobileMenuOpen(false);
+                          }}
+                          className={classNames(
+                            "w-full flex items-center gap-3 text-sm transition-colors px-3 py-2 rounded-lg",
+                            isActive 
+                              ? "text-indigo-700 font-medium bg-indigo-50"
+                              : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                          )}
+                        >
+                          <span>{item.label}</span>
+                          {isActive && (
+                            <div className="ml-auto h-2 w-2 rounded-full bg-indigo-500" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </Motion.div>
+                )}
+              </AnimatePresence>
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
 
   return (
     <div className="flex min-h-screen bg-app">
-      {/* Sidebar */}
-      <aside className="hidden md:flex flex-col border-r sidebar w-72 bg-slate-50/50" style={{ boxSizing: "border-box" }}>
-        {/* Logo Section */}
-        <div className="p-5 border-b bg-white">
-          <button onClick={()=>setPage('dashboard')} className="flex items-center gap-3 w-full text-left focus:outline-none group">
-            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all group-hover:scale-105">
-              <svg className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 4h6v6H3z M15 4h6v6h-6z M15 14h6v6h-6z M9 7h6 M9 7v10 M15 7v7" />
-              </svg>
-            </div>
-            <div className="flex flex-col">
-              <div className="font-bold text-lg leading-tight text-slate-900">Talent Tracker</div>
-              <div className="text-xs text-slate-500 font-medium">MOE Professional Development</div>
-            </div>
+      {/* Mobile Menu Button - Fixed Header */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white/95 backdrop-blur-sm border-b border-slate-200 z-40 flex items-center px-4 gap-3">
+        <button
+          onClick={() => setMobileMenuOpen(true)}
+          className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+        >
+          <Menu className="h-6 w-6" />
+        </button>
+        <div className="flex items-center gap-2">
+          <Workflow className="h-6 w-6 text-indigo-600" />
+          <span className="font-semibold text-slate-800">Talent Tracker</span>
+        </div>
+      </div>
+
+      {/* Mobile Sidebar Overlay */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <>
+            {/* Backdrop */}
+            <Motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileMenuOpen(false)}
+              className="md:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+            />
+            
+            {/* Slide-in Sidebar */}
+            <Motion.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              drag="x"
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={{ left: 0.5, right: 0 }}
+              onDragEnd={(_, info) => {
+                if (info.offset.x < -100 || info.velocity.x < -500) {
+                  setMobileMenuOpen(false);
+                }
+              }}
+              className="md:hidden fixed top-0 left-0 bottom-0 w-72 bg-white z-50 flex flex-col shadow-2xl"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-slate-200">
+                <div className="flex items-center gap-2">
+                  <Workflow className="h-7 w-7 text-indigo-600" />
+                  <span className="font-bold text-slate-800">Talent Tracker</span>
+                </div>
+                <button
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              {/* Navigation */}
+              <nav className="flex-1 overflow-y-auto py-4 px-2">
+                <NavContent isMobile={true} />
+              </nav>
+              
+              {/* User info at bottom */}
+              <div className="border-t border-slate-200 p-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center">
+                    <User className="h-5 w-5 text-indigo-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-900 truncate">{user?.email}</p>
+                    <p className="text-xs text-slate-500">{role}</p>
+                  </div>
+                </div>
+              </div>
+            </Motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Desktop Sidebar */}
+      <aside 
+        className={classNames(
+          "hidden md:flex flex-col border-r sidebar bg-slate-50/50 transition-all duration-300 relative",
+          sidebarCollapsed ? "w-20" : "w-64"
+        )} 
+        style={{ boxSizing: "border-box" }}
+      >
+        {/* Collapse/Expand Button - Top */}
+        <div className="border-b bg-white p-2">
+          <button
+            onClick={() => {
+              setSidebarCollapsed(!sidebarCollapsed);
+              setOpenSection(null);
+            }}
+            className="w-full flex items-center justify-center p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+          >
+            {sidebarCollapsed ? (
+              <ChevronRight className="h-5 w-5" />
+            ) : (
+              <ChevronLeft className="h-5 w-5" />
+            )}
           </button>
         </div>
 
         {/* Navigation Sections */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3">
+        <nav className="flex-1 overflow-y-auto py-4 px-2">
           {NAV_SECTIONS.map((section) => {
             // Filter items based on permissions
             const visibleItems = section.items.filter(item => allowed.includes(item.id));
             if (visibleItems.length === 0) return null;
             
-            const isExpanded = expandedSections.includes(section.id);
             const hasActiveItem = visibleItems.some(item => item.id === page);
+            const SectionIcon = ICONS[section.icon] || Home;
+            const isOpen = openSection === section.id;
             
             return (
-              <div key={section.id} className="mb-2">
-                {/* Section Header */}
+              <div 
+                key={section.id} 
+                data-section-id={section.id}
+                className="mb-1 relative"
+                // Hover behavior only when collapsed
+                onMouseEnter={(e) => sidebarCollapsed && handleSectionHover(section.id, e)}
+                onMouseLeave={() => sidebarCollapsed && handleSectionLeave()}
+              >
+                {/* Section Button */}
                 <button
-                  onClick={() => toggleSection(section.id)}
+                  onClick={() => {
+                    // If only one item, navigate directly
+                    if (visibleItems.length === 1) {
+                      setPage(visibleItems[0].id);
+                    } else if (!sidebarCollapsed) {
+                      // Click toggle only when expanded
+                      setOpenSection(isOpen ? null : section.id);
+                    }
+                  }}
                   className={classNames(
-                    "w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors",
-                    hasActiveItem ? "text-indigo-700 bg-indigo-50" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                    "w-full flex items-center gap-3 rounded-xl transition-all duration-200",
+                    sidebarCollapsed ? "p-3 justify-center" : "px-4 py-3",
+                    hasActiveItem 
+                      ? "bg-indigo-100 text-indigo-700" 
+                      : "text-slate-600 hover:bg-white hover:text-slate-900 hover:shadow-sm"
                   )}
                 >
-                  <span>{section.label}</span>
-                  <Motion.div
-                    animate={{ rotate: isExpanded ? 0 : -90 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <ChevronDown className="h-4 w-4" />
-                  </Motion.div>
+                  <div className={classNames(
+                    "flex items-center justify-center rounded-lg transition-colors",
+                    sidebarCollapsed ? "h-8 w-8" : "h-9 w-9",
+                    hasActiveItem 
+                      ? "bg-indigo-200 text-indigo-700" 
+                      : "bg-slate-100 text-slate-500"
+                  )}>
+                    <SectionIcon className={sidebarCollapsed ? "h-4 w-4" : "h-5 w-5"} />
+                  </div>
+                  {!sidebarCollapsed && (
+                    <>
+                      <span className="flex-1 text-left font-medium text-sm">{section.label}</span>
+                      {visibleItems.length > 1 && (
+                        <Motion.div
+                          animate={{ rotate: isOpen ? 90 : 0 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <ChevronRight className="h-4 w-4 text-slate-400" />
+                        </Motion.div>
+                      )}
+                    </>
+                  )}
                 </button>
                 
-                {/* Section Items */}
-                <AnimatePresence initial={false}>
-                  {isExpanded && (
-                    <Motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="mt-1 ml-2 space-y-0.5">
+                {/* Expanded mode: Inline dropdown (click to toggle) */}
+                {!sidebarCollapsed && (
+                  <AnimatePresence>
+                    {isOpen && visibleItems.length > 1 && (
+                      <Motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden mt-1 ml-4 border-l-2 border-slate-200 pl-4"
+                      >
                         {visibleItems.map(item => {
-                          const Icon = ICONS[item.icon] || Home;
                           const isActive = page === item.id;
-                          
                           return (
-                            <Motion.button
+                            <button
                               key={item.id}
                               onClick={() => setPage(item.id)}
-                              whileHover={{ x: 3 }}
-                              whileTap={{ scale: 0.98 }}
                               className={classNames(
-                                "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
+                                "w-full flex items-center gap-3 text-sm transition-colors px-3 py-2 rounded-lg",
                                 isActive 
-                                  ? "bg-white text-indigo-700 shadow-sm border border-indigo-100" 
-                                  : "text-slate-600 hover:bg-white hover:text-slate-900 hover:shadow-sm"
+                                  ? "text-indigo-700 font-medium bg-indigo-50"
+                                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                               )}
                             >
-                              <div className={classNames(
-                                "h-8 w-8 rounded-lg flex items-center justify-center transition-colors",
-                                isActive 
-                                  ? "bg-indigo-100 text-indigo-600" 
-                                  : "bg-slate-100 text-slate-500 group-hover:bg-slate-200"
-                              )}>
-                                <Icon className="h-4 w-4" />
-                              </div>
                               <span>{item.label}</span>
                               {isActive && (
-                                <Motion.div
-                                  layoutId="activeIndicator"
-                                  className="ml-auto h-2 w-2 rounded-full bg-indigo-500"
-                                  transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                                />
+                                <div className="ml-auto h-2 w-2 rounded-full bg-indigo-500" />
                               )}
-                            </Motion.button>
+                            </button>
                           );
                         })}
-                      </div>
-                    </Motion.div>
-                  )}
-                </AnimatePresence>
+                      </Motion.div>
+                    )}
+                  </AnimatePresence>
+                )}
+                
+                {/* Collapsed mode: Hover popout dropdown - rendered via Portal */}
+                {sidebarCollapsed && isOpen && ReactDOM.createPortal(
+                  <Motion.div
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    transition={{ duration: 0.15 }}
+                    className="fixed z-[9999] bg-white rounded-xl shadow-xl border border-slate-200 py-2 min-w-[200px]"
+                    style={{
+                      left: dropdownPos.left,
+                      top: dropdownPos.top
+                    }}
+                    onMouseEnter={() => handleDropdownEnter(section.id)}
+                    onMouseLeave={() => handleSectionLeave()}
+                  >
+                    {/* Section header */}
+                    <div className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100 mb-1 bg-slate-50 rounded-t-xl">
+                      {section.label}
+                    </div>
+                    {visibleItems.map(item => {
+                      const isActive = page === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setPage(item.id);
+                            setOpenSection(null);
+                          }}
+                          className={classNames(
+                            "w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors",
+                            isActive 
+                              ? "bg-indigo-50 text-indigo-700 font-medium" 
+                              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                          )}
+                        >
+                          <span>{item.label}</span>
+                          {isActive && (
+                            <div className="ml-auto h-2 w-2 rounded-full bg-indigo-500" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </Motion.div>,
+                  document.body
+                )}
               </div>
             );
           })}
         </nav>
-
-        {/* User Card Footer */}
-        <div className="p-4 border-t bg-white">
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200">
-            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shadow-sm">
-              <span className="text-sm font-bold text-white">
-                {(user?.name || 'U').charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-slate-900 truncate">{user?.name || 'User'}</div>
-              <div className="text-xs text-slate-500">{role}</div>
-            </div>
-            <button 
-              onClick={() => setPage('settings')} 
-              className="p-2 rounded-lg hover:bg-white hover:shadow-sm transition-all"
-              title="Settings"
-            >
-              <Settings className="h-4 w-4 text-slate-400" />
-            </button>
-          </div>
-        </div>
       </aside>
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto pt-14 md:pt-0">
         <TopBar />
         <div className="p-4 md:p-8">
           <AnimatePresence mode="wait">
@@ -666,6 +994,7 @@ function AppShell({ page, setPage }) {
               {page==="import"     && <ImportPage />}
               {page==="results"    && <ResultsUploadPage />}
               {page==="graduation" && <GraduationReviewPage />}
+              {page==="reports"    && <ReportsPage />}
               {page==="exports"    && <ExportsPage />}
               {page==="mentors"   && <MentorsPage />}
               {page==="settings"   && <SettingsPage />}
@@ -962,7 +1291,7 @@ function Dashboard() {
       >
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
-            {greeting}, {user?.name?.split(' ')[0] || 'Admin'}! 👋
+            {greeting}, {user?.name?.split(' ')[0] || 'Admin'}!
           </h1>
           <p className="text-slate-500 mt-1">{formattedDate}</p>
         </div>
@@ -1238,13 +1567,15 @@ function Td({ children, ...rest }){ return <td className="px-4 py-3 align-top" {
 
 function CoursesPage({ role }){
   const { courses, setCourses, addCourse, updateCourse, deleteCourse, logEvent, notify } = useStore();
+  const toast = useToast();
+  const { confirmDelete } = useConfirm();
   const [q,setQ]=useState("");
   const [filterTrack,setFilterTrack] = useState("");
   const [filterCode,setFilterCode] = useState("");
   const [showForm,setShowForm]=useState(false);
   const [editId,setEditId]=useState(null);
   const [form,setForm]=useState({ code:"", title:"", brief:"", weight:"0.3", passThreshold:"70", isRequired:true, tracks:[], modality:"", hours:"", active:true });
-  const canEdit = role==="Admin" || role==="ECAE Manager" || role==="ECAE Trainer";
+  const canEdit = role==="Super Admin" || role==="Admin" || role==="ECAE Manager" || role==="ECAE Trainer";
 
   const filtered = useMemo(()=>{
     const s=q.toLowerCase();
@@ -1281,10 +1612,10 @@ function CoursesPage({ role }){
     const code=form.code.trim();
     const title=form.title.trim();
     console.log('🔵 Form data:', { code, title, editId });
-    if(!code || !title){ alert("Code and Title are required."); return; }
-    if(!/^[A-Za-z0-9-_.]+$/.test(code)){ alert("Code should be letters/digits/-_."); return; }
+    if(!code || !title){ toast.error("Code and Title are required."); return; }
+    if(!/^[A-Za-z0-9-_.]+$/.test(code)){ toast.error("Code should be letters/digits/-_."); return; }
     const exists = courses.some(c => c.code.toLowerCase()===code.toLowerCase() && c.id!==editId);
-    if(exists){ alert("Course code already exists."); return; }
+    if(exists){ toast.error("Course code already exists."); return; }
     const obj = {
       id: editId || `COURSE-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
       code,
@@ -1343,21 +1674,25 @@ function CoursesPage({ role }){
         });
       }
       setShowForm(false);
+      toast.success(editId ? 'Course updated successfully!' : 'Course created successfully!');
     } catch (err) {
       console.error('Failed to save course:', err);
-      alert('Failed to save course: ' + (err.message || 'Please try again.'));
+      toast.error('Failed to save course: ' + (err.message || 'Please try again.'));
     }
   }
 
-  function delCourse(id){
-    if(!window.confirm("Delete this course?")) return;
+  async function delCourse(id){
+    const confirmed = await confirmDelete("this course");
+    if (!confirmed) return;
     const c = courses.find(x=>x.id===id);
-    // Use API to delete course
-    deleteCourse(id).catch(err => {
+    try {
+      await deleteCourse(id);
+      logEvent("course_deleted",{ code:c?.code, ts: new Date().toISOString() });
+      toast.success('Course deleted successfully!');
+    } catch (err) {
       console.error('Failed to delete course:', err);
-      alert('Failed to delete course. Please try again.');
-    });
-    logEvent("course_deleted",{ code:c?.code, ts: new Date().toISOString() });
+      toast.error('Failed to delete course. Please try again.');
+    }
   }
   function toggleTrack(tid){
     setForm(f => ({...f, tracks: f.tracks.includes(tid) ? f.tracks.filter(x=>x!==tid) : [...f.tracks, tid]}));
@@ -1476,10 +1811,12 @@ function CoursesPage({ role }){
 }
 
 import CandidatesPage from "./pages/CandidatesPage";
+import ReportsPage from "./pages/ReportsPage";
 
 // Add Candidate Modal
 function AddCandidateModal({ open, onClose, onAdded }){
   const { addCandidate, logEvent } = useStore();
+  const toast = useToast();
   const [form,setForm]=useState({ name:"", email:"", mobile:"", emirate:"", subject:"", gpa:"", nationalId:"" });
   const [err,setErr]=useState("");
   useEffect(()=>{ if(!open){ setForm({ name:"", email:"", mobile:"", emirate:"", subject:"", gpa:"", nationalId:"" }); setErr(""); } },[open]);
@@ -1493,7 +1830,7 @@ function AddCandidateModal({ open, onClose, onAdded }){
     if(!mobileRe.test(mobile.replace(/\s|-/g,""))){ setErr("Invalid UAE mobile (+9715… or 05XXXXXXXX)."); return; }
     const id=`C-${Date.now().toString().slice(-6)}`; const trackId=subjectToTrackId(subject);
     const newC={ id, name, nationalId, email, mobile, emirate, subject, gpa, trackId, status:"Imported", courseResults:[], enrollments:[], notesThread:[{ id:`N-${id}-0`, by:"System", role:"Admin", text:"Added manually.", ts:new Date().toISOString() }] };
-    try { await addCandidate(newC); logEvent("candidate_added_manual",{ id, subject, trackId, ts:new Date().toISOString() }); alert("Candidate added."); onAdded?.(id); } catch(e){ setErr("Failed to add candidate."); }
+    try { await addCandidate(newC); logEvent("candidate_added_manual",{ id, subject, trackId, ts:new Date().toISOString() }); toast.success("Candidate added successfully!"); onAdded?.(id); onClose?.(); } catch(e){ setErr("Failed to add candidate."); }
   }
   if(!open) return null;
   return (
@@ -1737,6 +2074,7 @@ function NonAdminCorrectionsPanel({ role, userName, items, pendingForTrainer, on
 // ------------------------------ Import Page ------------------------------
 function ImportPage(){
   const { candidates, bulkAddCandidates, logEvent } = useStore();
+  const toast = useToast();
   const [file,setFile]=useState(null); const [step,setStep]=useState("upload");
   const [mapping,setMapping]=useState({}); const [headers,setHeaders]=useState([]); const [rawRows,setRawRows]=useState([]);
   const [errors,setErrors]=useState([]); const [warnings,setWarnings]=useState([]); const [preview,setPreview]=useState([]);
@@ -1762,8 +2100,8 @@ function ImportPage(){
           const wb=window.XLSX.read(new Uint8Array(e.target.result),{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]];
           const arr=window.XLSX.utils.sheet_to_json(ws,{header:1}); const hdrs=arr.shift()||[]; const objs=arr.map(r=>Object.fromEntries(hdrs.map((h,i)=>[h,r[i]])));
           setHeaders(hdrs); setRawRows(objs); setMapping(autoMapHeaders(hdrs)); setStep("map");
-        }else alert("XLSX not supported unless SheetJS is loaded. Please use CSV or include SheetJS.");
-      }catch{ alert("Failed to parse file. Ensure it is a valid CSV/XLSX."); }
+        }else toast.warning("XLSX not supported unless SheetJS is loaded. Please use CSV or include SheetJS.");
+      }catch{ toast.error("Failed to parse file. Ensure it is a valid CSV/XLSX."); }
     };
     if(ext==='csv') reader.readAsText(f); else reader.readAsArrayBuffer(f);
   }
@@ -1785,14 +2123,14 @@ function ImportPage(){
     setErrors(errs); setWarnings(warns); setPreview(rows.slice(0,10)); setStep("preview");
   }
   async function commitImport(){
-    if(errors.length){ alert("Resolve errors before committing import."); return; }
+    if(errors.length){ toast.error("Resolve errors before committing import."); return; }
     const rows=rawRows.map(r=>{
       const pick=k=>r[mapping[k]]??''; const subj=String(pick('subject')).trim(); const trackId=subjectToTrackId(subj); const mobile=String(pick('mobile')).replace(/\s|-/g,'').replace(/^\+9715/,'05');
       return { id:`IMP-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, name:String(pick('name')).trim(), nationalId:String(pick('nationalid')||'').trim(), email:String(pick('email')).trim(), mobile, emirate:String(pick('emirate')).trim(), subject:subj, gpa:Number(String(pick('gpa')).replace(',','.')), trackId, status:"Imported", courseResults:[], enrollments:[], notesThread:[] };
     });
     await bulkAddCandidates(rows); logEvent("import_committed",{ count:rows.length, ts:new Date().toISOString() });
     setFile(null); setHeaders([]); setRawRows([]); setMapping({}); setErrors([]); setWarnings([]); setPreview([]); setStep("upload");
-    alert(`Imported ${rows.length} candidate(s).`);
+    toast.success(`Imported ${rows.length} candidate(s) successfully!`);
   }
 
   return (
@@ -1853,6 +2191,7 @@ function ImportPage(){
 // ------------------------------ Results Upload ------------------------------
 function ResultsUploadPage(){
   const { candidates, bulkUpdateCandidates } = useStore();
+  const toast = useToast();
   const [rows,setRows]=useState([]); const [report,setReport]=useState({ ok:0, updated:0, errors:[] });
 
   function parseResultsCSV(text){
@@ -1866,8 +2205,8 @@ function ResultsUploadPage(){
     reader.onload=(e)=>{ try{
       if(ext==="csv"){ setRows(parseResultsCSV(String(e.target.result))); }
       else if(window.XLSX){ const wb=window.XLSX.read(new Uint8Array(e.target.result),{type:"array"}); const ws=wb.Sheets[wb.SheetNames[0]]; const arr=window.XLSX.utils.sheet_to_csv(ws); setRows(parseResultsCSV(arr)); }
-      else alert("XLSX not supported unless SheetJS is loaded. Please use CSV or include SheetJS.");
-    }catch(err){ alert("Failed to parse results: "+err.message); } };
+      else toast.warning("XLSX not supported unless SheetJS is loaded. Please use CSV or include SheetJS.");
+    }catch(err){ toast.error("Failed to parse results: "+err.message); } };
     if(ext==="csv") reader.readAsText(f); else reader.readAsArrayBuffer(f);
   }
   async function applyResults(){
@@ -1887,7 +2226,7 @@ function ResultsUploadPage(){
       return JSON.stringify(c.courseResults) !== JSON.stringify(orig.courseResults);
     });
     if (toUpdate.length > 0) await bulkUpdateCandidates(toUpdate);
-    setReport({ ok:rows.length, updated, errors }); alert(`Processed ${rows.length} rows • Updated ${updated} candidates${errors.length?` • ${errors.length} issue(s)`:``}.`);
+    setReport({ ok:rows.length, updated, errors }); toast.success(`Processed ${rows.length} rows • Updated ${updated} candidates${errors.length?` • ${errors.length} issue(s)`:``}.`);
   }
 
   const templateCSV="CandidateID,CourseCode,Score,Pass,Date\nC-1000,T101,85,Pass,2025-08-01\nC-1001,T201,72,Fail,2025-08-05\n";
@@ -1937,6 +2276,7 @@ function ResultsUploadPage(){
 // ------------------------------ Bulk Course Import (CSV) ------------------------------
 function BulkCourseImportCard(){
   const { candidates, bulkUpdateCandidates, courses } = useStore();
+  const toast = useToast();
   const [logs, setLogs] = React.useState([]);
   const [busy, setBusy] = React.useState(false);
 
@@ -2084,7 +2424,7 @@ function BulkCourseImportCard(){
         }
         processRows(rows);
       }catch(err){
-        alert("Failed to parse CSV: " + (err?.message||err));
+        toast.error("Failed to parse CSV: " + (err?.message||err));
       }finally{
         setBusy(false);
         e.target.value = "";
@@ -2126,6 +2466,7 @@ function BulkCourseImportCard(){
 // ------------------------------ Graduation Review (uses course catalog) ------------------------------
 function GraduationReviewPage(){
   const { candidates, updateCandidate, bulkUpdateCandidates, setCorrections, logEvent, courses, notify } = useStore();
+  const toast = useToast();
 
   const withDerived = candidates.map(c=>({
     ...c,
@@ -2147,7 +2488,7 @@ function GraduationReviewPage(){
     if (candidate) {
       await updateCandidate(id, { ...candidate, status: "Graduated" });
       logEvent("graduation_force_approved",{ id, ts:new Date().toISOString() });
-      alert("Candidate marked as Graduated.");
+      toast.success("Candidate marked as Graduated.");
     }
   }
   function requestClarification(id){
@@ -2162,7 +2503,7 @@ function GraduationReviewPage(){
       body: "Please clarify/confirm required details for this candidate.",
       targetRef: { page: "candidates", candidateId: id }
     });
-    alert("Clarification sent to ECAE Trainer.");
+    toast.info("Clarification sent to ECAE Trainer.");
   }
   async function approveAllValid(){
     const toUpdate = candidates.filter(c=>{
@@ -2174,6 +2515,7 @@ function GraduationReviewPage(){
     if (toUpdate.length > 0) {
       await bulkUpdateCandidates(toUpdate);
       logEvent("graduation_approve_all_valid",{ count: toUpdate.length, ts:new Date().toISOString() });
+      toast.success(`${toUpdate.length} candidates approved for graduation.`);
     }
   }
   async function markReadyForHiring(){
@@ -2181,6 +2523,7 @@ function GraduationReviewPage(){
     if (toUpdate.length > 0) {
       await bulkUpdateCandidates(toUpdate);
       logEvent("graduation_mark_ready_for_hiring",{ count: toUpdate.length, ts:new Date().toISOString() });
+      toast.success(`${toUpdate.length} candidates marked as Ready for Hiring.`);
     }
   }
 
@@ -2337,42 +2680,89 @@ function ExportsPage(){
 // ------------------------------ Platform Users ------------------------------
 function UsersPage(){
   const { users, adminUpdateUser, adminResetPassword, adminDeleteUser, adminCreateUser, user } = useAuth();
+  const { roles } = useStore();
+  const toast = useToast();
+  const { confirmDelete } = useConfirm();
 
   const [showAdd, setShowAdd] = useState(false);
   const [newU, setNewU] = useState({ name: "", email: "", role: "Student", password: "" });
 
+  // Check if current user is Super Admin
+  const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL || user?.role === 'Super Admin';
+
+  // Get role options from database, filtering Super Admin for non-Super Admins
+  const roleOptions = useMemo(() => {
+    const dbRoles = (roles || []).map(r => r.name);
+    // Ensure we have at least some default roles if DB is empty
+    const defaultRoles = ["Admin", "ECAE Manager", "ECAE Trainer", "Auditor", "Student"];
+    const allRoles = dbRoles.length > 0 ? dbRoles : defaultRoles;
+    // Filter out Super Admin for non-Super Admins
+    return isSuperAdmin ? allRoles : allRoles.filter(r => r !== 'Super Admin');
+  }, [roles, isSuperAdmin]);
+
   function createUser() {
+    // Prevent non-Super Admins from creating Super Admin users
+    if (newU.role === 'Super Admin' && !isSuperAdmin) {
+      toast.warning('Only Super Admin can create Super Admin users');
+      return;
+    }
     try {
       const { tempPassword } = adminCreateUser(newU);
-      alert(`User created.\nEmail: ${newU.email}\nTemporary password: ${tempPassword}`);
+      toast.success(`User created! Email: ${newU.email}, Temp password: ${tempPassword}`);
       setNewU({ name: "", email: "", role: "Student", password: "" });
       setShowAdd(false);
     } catch (e) {
-      alert(e.message || "Failed to create user");
+      toast.error(e.message || "Failed to create user");
     }
   }
 
   const [q, setQ] = useState("");
   const filtered = useMemo(()=>{
     const s = q.toLowerCase();
-    return (users||[]).filter(u =>
-      (u.name||"").toLowerCase().includes(s) ||
-      (u.email||"").toLowerCase().includes(s) ||
-      (u.role||"").toLowerCase().includes(s)
-    );
-  },[q,users]);
+    // Filter out Super Admin users if current user is not Super Admin
+    return (users||[]).filter(u => {
+      // Hide Super Admin users from non-Super Admins
+      if (u.role === 'Super Admin' && !isSuperAdmin) return false;
+      // Search filter
+      return (u.name||"").toLowerCase().includes(s) ||
+        (u.email||"").toLowerCase().includes(s) ||
+        (u.role||"").toLowerCase().includes(s);
+    });
+  },[q, users, isSuperAdmin]);
 
-  function changeRole(email, role){ adminUpdateUser(email, { role }); }
-  function resetPwd(email){
-    try{ const temp = adminResetPassword(email); alert(`Temporary password for ${email}: ${temp}`); }
-    catch(e){ alert(e.message||"Failed to reset"); }
-  }
-  function del(email){
-    if ((user?.email||"").toLowerCase() === String(email||"").toLowerCase()){
-      alert("You cannot delete the account that is currently signed in."); return;
+  function changeRole(email, role){
+    // Prevent non-Super Admins from assigning Super Admin role
+    if (role === 'Super Admin' && !isSuperAdmin) {
+      toast.warning('Only Super Admin can assign Super Admin role');
+      return;
     }
-    if (!window.confirm(`Delete user ${email}? This cannot be undone.`)) return;
-    try{ adminDeleteUser(email); }catch(e){ alert(e.message||"Failed to delete"); }
+    // Prevent changing the primary Super Admin's role
+    if (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() && role !== 'Super Admin') {
+      toast.error('The primary Super Admin role cannot be changed');
+      return;
+    }
+    adminUpdateUser(email, { role });
+    toast.success('Role updated');
+  }
+  function resetPwd(email){
+    try{ 
+      adminResetPassword(email); 
+      toast.success(`Password reset to "1234" for ${email}`); 
+    }
+    catch(e){ toast.error(e.message||"Failed to reset"); }
+  }
+  async function del(email){
+    if ((user?.email||"").toLowerCase() === String(email||"").toLowerCase()){
+      toast.warning("You cannot delete the account that is currently signed in."); return;
+    }
+    // Prevent deleting the primary Super Admin
+    if (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
+      toast.error('The primary Super Admin account cannot be deleted');
+      return;
+    }
+    const confirmed = await confirmDelete(`user ${email}`);
+    if (!confirmed) return;
+    try{ adminDeleteUser(email); toast.success('User deleted'); }catch(e){ toast.error(e.message||"Failed to delete"); }
   }
   function exportUsers(){
     const headers = [
@@ -2385,9 +2775,8 @@ function UsersPage(){
       name: u.name||"", email: u.email||"", role: u.role||"", createdAt: u.createdAt ? new Date(u.createdAt).toLocaleString() : ""
     }));
     exportXLSX("Platform_Users.xlsx", rows, headers, "Users");
+    toast.success('Users exported');
   }
-
-  const roleOptions = ["Admin","ECAE Manager","ECAE Trainer","Auditor","Student"];
 
   return (
     <div className="space-y-4">
@@ -2409,7 +2798,7 @@ function UsersPage(){
             <input className="rounded-xl border px-3 py-2" placeholder="Full name" value={newU.name} onChange={e=>setNewU({...newU, name:e.target.value})} />
             <input type="email" className="rounded-xl border px-3 py-2" placeholder="Email" value={newU.email} onChange={e=>setNewU({...newU, email:e.target.value})} />
             <select className="rounded-xl border px-3 py-2" value={newU.role} onChange={e=>setNewU({...newU, role:e.target.value})}>
-              {["Admin","ECAE Manager","ECAE Trainer","Auditor","Student"].map(r => <option key={r} value={r}>{r}</option>)}
+              {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
             <input className="rounded-xl border px-3 py-2" placeholder="Password (optional)" value={newU.password} onChange={e=>setNewU({...newU, password:e.target.value})} />
             <div className="md:col-span-4 flex justify-end">
@@ -2433,21 +2822,44 @@ function UsersPage(){
           </thead>
           <tbody>
             <AnimatePresence>
-              {filtered.map(u => (
+              {filtered.map(u => {
+                const isTargetSuperAdmin = u.role === 'Super Admin';
+                const isPrimarySuperAdmin = u.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+                
+                return (
                 <Motion.tr key={u.email} className="border-t" initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-6}} layout>
                   <td className="px-3 py-2">{u.name||"—"}</td>
                   <td className="px-3 py-2">{u.email}</td>
                   <td className="px-3 py-2">
-                    <select className="rounded-lg border px-2 py-1" value={u.role||"Student"} onChange={e=>changeRole(u.email, e.target.value)}>
-                      {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
-                    </select>
+                    {isPrimarySuperAdmin ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-gradient-to-r from-rose-500 to-purple-600 text-white">
+                        <Shield className="h-3 w-3" />
+                        Super Admin
+                      </span>
+                    ) : (
+                      <select 
+                        className="rounded-lg border px-2 py-1" 
+                        value={u.role||"Student"} 
+                        onChange={e=>changeRole(u.email, e.target.value)}
+                        disabled={isTargetSuperAdmin && !isSuperAdmin}
+                      >
+                        {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    )}
                   </td>
                   <td className="px-3 py-2 space-x-2">
-                    <button className="rounded-lg border px-3 py-1" onClick={()=>resetPwd(u.email)}>Reset</button>
-                    <button className="rounded-lg border px-3 py-1 text-rose-700" onClick={()=>del(u.email)}>Delete</button>
+                    {!isPrimarySuperAdmin && (
+                      <>
+                        <button className="rounded-lg border px-3 py-1" onClick={()=>resetPwd(u.email)}>Reset</button>
+                        <button className="rounded-lg border px-3 py-1 text-rose-700" onClick={()=>del(u.email)}>Delete</button>
+                      </>
+                    )}
+                    {isPrimarySuperAdmin && (
+                      <span className="text-xs text-slate-400">Protected</span>
+                    )}
                   </td>
                 </Motion.tr>
-              ))}
+              )})}
               {filtered.length===0 && (
                 <Motion.tr key="no-users" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
                   <td colSpan={4} className="px-3 py-6 text-center text-slate-500">No users found.</td>
@@ -2639,12 +3051,18 @@ function HiringTrackerPage(){
 
 // ------------------------------ Role Management ------------------------------
 function RoleManagementPage() {
+  const { user } = useAuth();
   const { roles, addRole, updateRole, deleteRole: storeDeleteRole, loading } = useStore();
+  const toast = useToast();
+  const { confirmDelete } = useConfirm();
   
   const [showForm, setShowForm] = useState(false);
   const [editingRole, setEditingRole] = useState(null);
   const [form, setForm] = useState({ name: '', description: '', color: 'indigo', permissions: [] });
   const [saving, setSaving] = useState(false);
+  
+  // Check if current user is Super Admin
+  const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL || user?.role === 'Super Admin';
 
   const allPermissions = [
     { id: 'dashboard', label: 'Dashboard', category: 'Overview' },
@@ -2658,9 +3076,10 @@ function RoleManagementPage() {
     { id: 'import', label: 'Import Data', category: 'Workflow' },
     { id: 'graduation', label: 'Graduation Review', category: 'Workflow' },
     { id: 'hiring', label: 'Hiring Tracker', category: 'Workflow' },
-    { id: 'exports', label: 'Reports & Exports', category: 'System' },
+    { id: 'reports', label: 'Reports & Analytics', category: 'Analytics' },
+    { id: 'exports', label: 'Data Exports', category: 'Analytics' },
     { id: 'roles', label: 'Role Management', category: 'System' },
-    { id: 'settings', label: 'Settings', category: 'System' },
+    { id: 'settings', label: 'Landing Page Updates', category: 'System' },
   ];
 
   const permissionsByCategory = allPermissions.reduce((acc, perm) => {
@@ -2720,7 +3139,7 @@ function RoleManagementPage() {
 
   const saveRole = async () => {
     if (!form.name.trim()) {
-      alert('Please enter a role name');
+      toast.error('Please enter a role name');
       return;
     }
     
@@ -2731,21 +3150,25 @@ function RoleManagementPage() {
           name: form.name,
           description: form.description,
           color: form.color,
-          permissions: form.permissions
+          permissions: form.permissions,
+          requestingUserEmail: user?.email
         });
+        toast.success('Role updated successfully');
       } else {
         await addRole({
           name: form.name,
           description: form.description,
           color: form.color,
           permissions: form.permissions,
-          is_system: false
+          is_system: false,
+          requestingUserEmail: user?.email
         });
+        toast.success('Role created successfully');
       }
       setShowForm(false);
     } catch (err) {
       console.error('Failed to save role:', err);
-      alert('Failed to save role. Please try again.');
+      toast.error('Failed to save role. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -2754,15 +3177,17 @@ function RoleManagementPage() {
   const handleDeleteRole = async (roleId) => {
     const role = roles.find(r => r.id === roleId);
     if (role?.is_system) {
-      alert('System roles cannot be deleted');
+      toast.warning('System roles cannot be deleted');
       return;
     }
-    if (window.confirm('Are you sure you want to delete this role?')) {
+    const confirmed = await confirmDelete('this role');
+    if (confirmed) {
       try {
         await storeDeleteRole(roleId);
+        toast.success('Role deleted');
       } catch (err) {
         console.error('Failed to delete role:', err);
-        alert('Failed to delete role. Please try again.');
+        toast.error('Failed to delete role. Please try again.');
       }
     }
   };
@@ -2791,35 +3216,58 @@ function RoleManagementPage() {
 
       {/* Roles Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {roles.map(role => (
+        {roles.map(role => {
+          const isProtected = role.is_protected || role.name === 'Super Admin';
+          const canEdit = !isProtected || isSuperAdmin;
+          
+          return (
           <Motion.div
             key={role.id}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="rounded-2xl border bg-white p-5 shadow-sm hover:shadow-md transition-shadow"
+            className={classNames(
+              "rounded-2xl border bg-white p-5 shadow-sm hover:shadow-md transition-shadow",
+              isProtected && "ring-2 ring-rose-200 border-rose-200"
+            )}
           >
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3">
-                <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${getColorClass(role.color)}`}>
+                <div className={classNames(
+                  "h-10 w-10 rounded-xl flex items-center justify-center",
+                  isProtected ? "bg-gradient-to-br from-rose-500 to-purple-600 text-white" : getColorClass(role.color)
+                )}>
                   <Shield className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-slate-900">{role.name}</h3>
+                  <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                    {role.name}
+                    {isProtected && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-rose-100 text-rose-600 font-medium">Protected</span>
+                    )}
+                  </h3>
                   {role.is_system && (
                     <span className="text-xs text-slate-400">System Role</span>
                   )}
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <button 
-                  onClick={() => openEdit(role)}
-                  className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                  </svg>
-                </button>
-                {!role.is_system && (
+                {canEdit ? (
+                  <button 
+                    onClick={() => openEdit(role)}
+                    className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+                ) : (
+                  <div className="p-2 text-slate-300 cursor-not-allowed" title="Protected role cannot be edited">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                )}
+                {!role.is_system && !isProtected && (
                   <button 
                     onClick={() => handleDeleteRole(role.id)}
                     className="p-2 rounded-lg hover:bg-red-50 text-slate-500 hover:text-red-600 transition-colors"
@@ -2850,7 +3298,8 @@ function RoleManagementPage() {
               </div>
             </div>
           </Motion.div>
-        ))}
+        );
+        })}
       </div>
 
       {/* Create/Edit Modal */}
@@ -2983,8 +3432,10 @@ const NEWS_CATEGORIES = ['General', 'Training', 'MOE', 'Announcements', 'Events'
 
 function SettingsPage(){
   const { user } = useAuth();
-  const isAdmin = user?.role === "Admin";
+  const isAdmin = user?.role === "Admin" || user?.role === "Super Admin";
   const { publicNews, addNews, updateNews, deleteNews } = useStore();
+  const toast = useToast();
+  const { confirmDelete } = useConfirm();
 
   // local inputs for new post
   const [title, setTitle] = React.useState("");
@@ -2995,19 +3446,23 @@ function SettingsPage(){
   async function addUpdate(){
     if (!isAdmin) return;
     const t = title.trim(), b = body.trim();
-    if (!t || !b) { alert("Title and body are required."); return; }
+    if (!t || !b) { toast.error("Title and body are required."); return; }
     if (editingId) {
       await updateNews(editingId, { title: t, body: b, category });
+      toast.success("Update saved");
       setEditingId("");
     } else {
       await addNews({ title: t, body: b, category, authorEmail: user?.email });
+      toast.success("Update published");
     }
     setTitle(""); setBody(""); setCategory("General");
   }
   async function removeUpdate(id){
     if (!isAdmin) return;
-    if (!window.confirm("Delete this update?")) return;
+    const confirmed = await confirmDelete("this update");
+    if (!confirmed) return;
     await deleteNews(id);
+    toast.success("Update deleted");
   }
 
   return (
@@ -3097,10 +3552,12 @@ export default function App(){
     <AuthProvider>
       <StoreProvider>
         <ToastProvider>
-          <Gate>
-            <AppShell page={page} setPage={setPage} />
-            <footer className="p-6 text-center text-xs text-slate-500">© 2025 PD Sector — MVP UI Demo</footer>
-          </Gate>
+          <ConfirmProvider>
+            <Gate>
+              <AppShell page={page} setPage={setPage} />
+              <footer className="p-6 text-center text-xs text-slate-500">© 2025 PD Sector — MVP UI Demo</footer>
+            </Gate>
+          </ConfirmProvider>
         </ToastProvider>
       </StoreProvider>
     </AuthProvider>
@@ -3112,6 +3569,7 @@ export default function App(){
 function LandingPage({ onSignIn, onSignUp }){
   const { user } = useAuth();
   const { publicNews, addNews } = useStore();
+  const toast = useToast();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [category, setCategory] = useState("General");
@@ -3121,7 +3579,7 @@ function LandingPage({ onSignIn, onSignUp }){
 
   async function addUpdate(){
     const t = title.trim(), b = body.trim();
-    if (!t || !b) { alert("Please fill a title and body."); return; }
+    if (!t || !b) { toast.error("Please fill a title and body."); return; }
     await addNews({ title: t, body: b, category, authorEmail: user?.email });
     setTitle(""); setBody(""); setCategory("General");
     setManageOpen(false);
@@ -3346,7 +3804,7 @@ function LandingPage({ onSignIn, onSignUp }){
                           </div>
                         )}
 
-                        {user?.role === "Admin" && (
+                        {(user?.role === "Admin" || user?.role === "Super Admin") && (
                           <div className="mt-4">
                             <button onClick={()=>setManageOpen(o=>!o)} className="text-xs text-slate-500 underline">
                               {manageOpen ? "Hide post form" : "Post an update"}
@@ -3613,6 +4071,7 @@ function SignUpStudent({ onBack, onSuccess }){
 
 function ForgotPassword({ onBack, onSuccess, prefillEmail = "" }){
   const { requestPasswordReset, confirmPasswordReset } = useAuth();
+  const toast = useToast();
   const [step, setStep] = useState("start"); // "start" | "verify"
   const [email, setEmail] = useState(prefillEmail);
   const [issuedCode, setIssuedCode] = useState("");
@@ -3644,7 +4103,7 @@ function ForgotPassword({ onBack, onSuccess, prefillEmail = "" }){
     }
     try {
       confirmPasswordReset(email, code, newPassword);
-      alert("Password updated! Please sign in with your new password.");
+      toast.success("Password updated! Please sign in with your new password.");
       onSuccess?.();
     } catch (ex){
       setErr(ex.message || "Could not reset password");
@@ -3689,6 +4148,7 @@ function ForgotPassword({ onBack, onSuccess, prefillEmail = "" }){
 function StudentProfile(){
   const { user, updateProfile, logout } = useAuth();
   const { candidates, courses, notify } = useStore();
+  const toast = useToast();
   const [saveMessage, setSaveMessage] = useState("");
 
   const [form, setForm] = useState({
@@ -3734,7 +4194,7 @@ function StudentProfile(){
 
   function _saveProfile(){
     updateProfile({ ...form });
-    alert("Profile saved.");
+    toast.success("Profile saved.");
   }
 
   function expressInterest(){
@@ -3742,7 +4202,7 @@ function StudentProfile(){
     try {
       notify({ role:"Admin" }, { type:"student_interest", title:"New student interest", body:`${user?.name||user?.email} wants to join MOE`, targetRef:{ page:"applicants" } });
   } catch (e) { void e; }
-    alert("Your interest has been sent. An admin will review your profile.");
+    toast.success("Your interest has been sent. An admin will review your profile.");
   }
 
   // If accepted, find my candidate record and compute progress
@@ -3752,9 +4212,9 @@ function StudentProfile(){
   const progressPct = assignedEnrolls.length ? Math.round(100*completedEnrolls.length/assignedEnrolls.length) : 0;
 
   function downloadMyPDF(){
-    if(!myCandidate){ alert("No candidate record yet."); return; }
+    if(!myCandidate){ toast.warning("No candidate record yet."); return; }
     const name = user?.name || user?.email || "User";
-    generateCandidatePDF(myCandidate, courses, name);
+    generateCandidatePDF(myCandidate, courses, name, (err) => toast.error(err));
   }
 
   function handleFile(key, file){
@@ -3927,6 +4387,7 @@ if(typeof window!=="undefined"){ try{ runDevTests(); }catch(e){ console.error("D
 function ApplicantsPage(){
   const { users, adminUpdateUser } = useAuth();
   const { notify, addCandidate } = useStore();
+  const toast = useToast();
 
   const applicants = users.filter(u => u.role==="Student" && u.interested);
   const [open, setOpen] = React.useState(null); // email of selected applicant
@@ -3970,11 +4431,11 @@ function ApplicantsPage(){
       await adminUpdateUser(email, { applicantStatus: "Accepted", candidateId: id, interested: false });
       console.log('✅ User updated successfully');
       notify({ role:"Admin" }, { type:"applicant_accepted", title:"Applicant accepted", body:`${u.name} moved to Candidates`, target:{ page:"candidates", candidateId:id } });
-      alert("Applicant accepted and added to Candidates.");
+      toast.success("Applicant accepted and added to Candidates.");
       setOpen(null);
     } catch (error) {
       console.error('❌ Failed to accept applicant:', error);
-      alert("Failed to accept applicant. Please try again.");
+      toast.error("Failed to accept applicant. Please try again.");
     }
   }
 
@@ -3984,11 +4445,11 @@ function ApplicantsPage(){
     try {
       await adminUpdateUser(email, { applicantStatus:"Rejected", interested: false });
       notify({ role:"Admin" }, { type:"applicant_rejected", title:"Applicant rejected", body:`${u.name} rejected.` });
-      alert("Applicant rejected.");
+      toast.info("Applicant rejected.");
       setOpen(null);
     } catch (error) {
       console.error('Failed to reject applicant:', error);
-      alert("Failed to reject applicant. Please try again.");
+      toast.error("Failed to reject applicant. Please try again.");
     }
   }
 
@@ -4011,6 +4472,7 @@ function ApplicantsPage(){
   const ws = XLSX.utils.json_to_sheet(rows);
   XLSX.utils.book_append_sheet(wb, ws, "Applicants");
   XLSX.writeFile(wb, "Applicants.xlsx");
+  toast.success("Applicants exported");
   }
 
   return (
@@ -4131,6 +4593,8 @@ function CourseEnrollmentPage(){
 
 function ManualEnrollCard(){
   const { candidates, setCandidates, courses, notify } = useStore();
+  const toast = useToast();
+  const { confirm } = useConfirm();
   const [query, setQuery] = React.useState("");
   const [selectedId, setSelectedId] = React.useState("");
   const [courseCode, setCourseCode] = React.useState("");
@@ -4154,11 +4618,11 @@ function ManualEnrollCard(){
   },[query, list]);
 
   function assign(){
-    if (!selectedId || !courseCode) { alert("Select a candidate and a course."); return; }
+    if (!selectedId || !courseCode) { toast.error("Select a candidate and a course."); return; }
     const code = String(courseCode).trim().toUpperCase();
     const next = list.map(c => ({...c, enrollments: (c.enrollments||[]).map(e=>({ ...e }))}));
     const idx = next.findIndex(c => String(c.id)===String(selectedId));
-    if (idx === -1) { alert("Candidate not found."); return; }
+    if (idx === -1) { toast.error("Candidate not found."); return; }
     const cand = next[idx];
     const exists = (cand.enrollments||[]).find(e => String(e.code).toUpperCase()===code);
     if (exists){
@@ -4184,23 +4648,29 @@ function ManualEnrollCard(){
     }
     setCandidates(next);
     notify?.("Enrollment", `Assigned ${cand.name||cand.email} → ${courseCode}`);
+    toast.success(`${cand.name || cand.email} enrolled in ${courseCode}`);
     setQuery(""); setCourseCode(""); setCohort(""); setStartDate(""); setEndDate("");
   }
 
-  function removeEnrollment(code){
+  async function removeEnrollment(code){
     const ccode = String(code||"").toUpperCase();
-    if (!selectedId || !ccode) { alert("Select a candidate and a course to remove."); return; }
-    if (!confirm("Remove this candidate from the selected course?")) return;
+    if (!selectedId || !ccode) { toast.error("Select a candidate and a course to remove."); return; }
+    const confirmed = await confirm({ title: 'Remove Enrollment', message: 'Remove this candidate from the selected course?', confirmText: 'Remove', type: 'warning' });
+    if (!confirmed) return;
     const next = list.map(c => ({...c, enrollments: (c.enrollments||[]).map(e=>({ ...e }))}));
     const idx = next.findIndex(c => String(c.id)===String(selectedId));
-    if (idx === -1) { alert("Candidate not found."); return; }
+    if (idx === -1) { toast.error("Candidate not found."); return; }
     const cand = next[idx];
     const before = cand.enrollments?.length || 0;
     cand.enrollments = (cand.enrollments||[]).filter(e => String(e.code).toUpperCase() !== ccode);
     const after = cand.enrollments.length;
     setCandidates(next);
     notify?.("Enrollment", `Removed ${cand.name||cand.email} from ${ccode}`);
-    if (before === after) alert("Candidate was not enrolled in that course.");
+    if (before === after) {
+      toast.warning("Candidate was not enrolled in that course.");
+    } else {
+      toast.success(`Removed from ${ccode}`);
+    }
   }
 
   return (
@@ -4296,6 +4766,7 @@ function ManualEnrollCard(){
 
 function BulkEnrollOnlyCard(){
   const { candidates, setCandidates, courses } = useStore();
+  const toast = useToast();
   const [logs, setLogs] = React.useState([]);
   const [busy, setBusy] = React.useState(false);
   const [preview, setPreview] = React.useState(null); // { rows, stats, logLines }
@@ -4456,7 +4927,7 @@ function BulkEnrollOnlyCard(){
           ...logLines,
         ]);
       }catch(err){
-        alert("Failed to parse CSV: " + (err?.message||err));
+        toast.error("Failed to parse CSV: " + (err?.message||err));
       }finally{
         setBusy(false);
         e.target.value = "";

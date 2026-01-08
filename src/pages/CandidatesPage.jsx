@@ -1,11 +1,15 @@
 import React, { useState, useMemo } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import { useStore } from "../providers/StoreProvider";
+import { useToast } from "../components/Toast";
+import { useConfirm } from "../components/ui/ConfirmDialog";
 import { classNames, computeFinalAverage, statusBadgeColor } from "../utils/helpers";
 import { Search, Filter, MoreHorizontal, Eye, Edit2, Trash2 } from "lucide-react";
 
 export default function CandidatesPage({ role, onOpenCandidate, onEditCandidate }){
   const { candidates, deleteCandidate: deleteCandidateAPI, logEvent, courses } = useStore();
+  const toast = useToast();
+  const { confirmDelete } = useConfirm();
   const [q,setQ]=useState(""); const [statusFilter,setStatusFilter]=useState("");
 
   const rows = useMemo(()=> candidates.filter(c=>{
@@ -15,13 +19,15 @@ export default function CandidatesPage({ role, onOpenCandidate, onEditCandidate 
   }),[q,statusFilter,candidates]);
 
   async function deleteCandidate(id){
-    if(!window.confirm("Delete this candidate? This action cannot be undone.")) return;
+    const confirmed = await confirmDelete("this candidate");
+    if (!confirmed) return;
     try {
       await deleteCandidateAPI(id);
       logEvent("candidate_deleted",{ id, ts:new Date().toISOString() });
+      toast.success("Candidate deleted successfully");
     } catch (error) {
       console.error('Failed to delete candidate:', error);
-      alert('Failed to delete candidate. Please try again.');
+      toast.error("Failed to delete candidate. Please try again.");
     }
   }
 
@@ -130,7 +136,7 @@ export default function CandidatesPage({ role, onOpenCandidate, onEditCandidate 
                           >
                             <Eye className="h-4 w-4" />
                           </button>
-                          {role==="Admin" && (
+                          {(role==="Admin" || role==="Super Admin") && (
                             <>
                               <button 
                                 onClick={()=>onEditCandidate?.(c.id)} 

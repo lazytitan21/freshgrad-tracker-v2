@@ -1,31 +1,66 @@
 import React, { useState } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../providers/AuthProvider";
-import { UserPlus, Trash2, Edit2, Download, Upload, Eye, EyeOff } from "lucide-react";
+import { useToast } from "../components/Toast";
+import { useConfirm } from "../components/ui/ConfirmDialog";
+import { UserPlus, Trash2, Edit2, Download, Upload, Eye, EyeOff, Shield } from "lucide-react";
+
+// Super Admin email - must match server-db.cjs
+const SUPER_ADMIN_EMAIL = 'firas.kiftaro@moe.gov.ae';
 
 export default function UsersManagementPage() {
-  const { users, adminUpdateUser, adminDeleteUser, adminAddUser } = useAuth();
+  const { user: currentUser, users, adminUpdateUser, adminDeleteUser, adminAddUser } = useAuth();
+  const toast = useToast();
+  const { confirmDelete, confirm } = useConfirm();
   const [editingId, setEditingId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPasswords, setShowPasswords] = useState({});
 
+  // Check if current user is Super Admin
+  const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL || currentUser?.role === 'Super Admin';
+
   // Filter only system users (not students/applicants)
-  const systemUsers = users.filter(u => 
-    ["Admin", "ECAE Manager", "ECAE Trainer", "Auditor"].includes(u.role)
-  );
+  // Hide Super Admin users from non-Super Admin viewers
+  const systemUsers = users.filter(u => {
+    const isSystemRole = ["Super Admin", "Admin", "ECAE Manager", "ECAE Trainer", "Auditor"].includes(u.role);
+    // If not a system role, exclude
+    if (!isSystemRole) return false;
+    // If the user being viewed is Super Admin, only show to other Super Admins
+    if (u.role === 'Super Admin' && !isSuperAdmin) return false;
+    return true;
+  });
 
   function handleEdit(user) {
+    // Prevent non-Super Admins from editing Super Admin users
+    if (user.role === 'Super Admin' && !isSuperAdmin) {
+      toast.warning('Only Super Admin can edit Super Admin users');
+      return;
+    }
     setEditingId(user.email);
   }
 
   function handleSave(user) {
     adminUpdateUser(user.email, user);
     setEditingId(null);
+    toast.success('User updated successfully');
   }
 
-  function handleDelete(email) {
-    if (window.confirm(`Delete user ${email}? This cannot be undone.`)) {
+  async function handleDelete(email) {
+    // Prevent deletion of Super Admin by non-Super Admins
+    const userToDelete = users.find(u => u.email === email);
+    if (userToDelete?.role === 'Super Admin' && !isSuperAdmin) {
+      toast.warning('Only Super Admin can delete Super Admin users');
+      return;
+    }
+    // Prevent deleting the primary Super Admin email entirely
+    if (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
+      toast.error('The primary Super Admin account cannot be deleted');
+      return;
+    }
+    const confirmed = await confirmDelete(`user ${email}`);
+    if (confirmed) {
       adminDeleteUser(email);
+      toast.success('User deleted successfully');
     }
   }
 
@@ -38,6 +73,7 @@ export default function UsersManagementPage() {
     a.download = 'users.json';
     a.click();
     URL.revokeObjectURL(url);
+    toast.success('Users exported successfully');
   }
 
   function uploadUsersJSON(file) {
@@ -49,10 +85,10 @@ export default function UsersManagementPage() {
         
         // Update localStorage directly
         localStorage.setItem("fg.users", JSON.stringify(data));
-        alert(`✅ Uploaded ${data.length} users. Refresh the page to apply changes.`);
-        window.location.reload();
+        toast.success(`Uploaded ${data.length} users. Refreshing...`);
+        setTimeout(() => window.location.reload(), 1500);
       } catch (err) {
-        alert('❌ Invalid JSON file: ' + err.message);
+        toast.error('Invalid JSON file: ' + err.message);
       }
     };
     reader.readAsText(file);
@@ -137,6 +173,8 @@ export default function UsersManagementPage() {
                   onDelete={() => handleDelete(user.email)}
                   onTogglePassword={() => togglePasswordVisibility(user.email)}
                   onCancel={() => setEditingId(null)}
+                  isSuperAdmin={isSuperAdmin}
+                  isTargetSuperAdmin={user.role === 'Super Admin'}
                 />
               ))}
             </AnimatePresence>
@@ -152,14 +190,18 @@ export default function UsersManagementPage() {
             adminAddUser(newUser);
             setShowAddModal(false);
           }}
+          isSuperAdmin={isSuperAdmin}
         />
       )}
     </div>
   );
 }
 
-function UserRow({ user, isEditing, showPassword, onEdit, onSave, onDelete, onTogglePassword, onCancel }) {
+function UserRow({ user, isEditing, showPassword, onEdit, onSave, onDelete, onTogglePassword, onCancel, isSuperAdmin, isTargetSuperAdmin }) {
   const [editData, setEditData] = useState(user);
+  
+  // Check if this is the primary Super Admin (cannot change role)
+  const isPrimarySuperAdmin = user.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
 
   if (isEditing) {
     return (
@@ -183,6 +225,7 @@ function UserRow({ user, isEditing, showPassword, onEdit, onSave, onDelete, onTo
             value={editData.email}
             onChange={(e) => setEditData({ ...editData, email: e.target.value })}
             className="w-full rounded border px-2 py-1"
+            disabled={isPrimarySuperAdmin}
           />
         </td>
         <td className="px-4 py-3">
@@ -194,16 +237,24 @@ function UserRow({ user, isEditing, showPassword, onEdit, onSave, onDelete, onTo
           />
         </td>
         <td className="px-4 py-3">
-          <select
-            value={editData.role}
-            onChange={(e) => setEditData({ ...editData, role: e.target.value })}
-            className="w-full rounded border px-2 py-1"
-          >
-            <option>Admin</option>
-            <option>ECAE Manager</option>
-            <option>ECAE Trainer</option>
-            <option>Auditor</option>
-          </select>
+          {isPrimarySuperAdmin ? (
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-rose-500" />
+              <span className="text-sm text-slate-500">Super Admin (Protected)</span>
+            </div>
+          ) : (
+            <select
+              value={editData.role}
+              onChange={(e) => setEditData({ ...editData, role: e.target.value })}
+              className="w-full rounded border px-2 py-1"
+            >
+              {isSuperAdmin && <option>Super Admin</option>}
+              <option>Admin</option>
+              <option>ECAE Manager</option>
+              <option>ECAE Trainer</option>
+              <option>Auditor</option>
+            </select>
+          )}
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center justify-center gap-2">
@@ -248,33 +299,49 @@ function UserRow({ user, isEditing, showPassword, onEdit, onSave, onDelete, onTo
         </div>
       </td>
       <td className="px-4 py-3">
-        <span className="inline-block px-2 py-1 rounded-full text-xs bg-indigo-100 text-indigo-800">
+        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
+          user.role === 'Super Admin' 
+            ? 'bg-gradient-to-r from-rose-500 to-purple-600 text-white' 
+            : 'bg-indigo-100 text-indigo-800'
+        }`}>
+          {user.role === 'Super Admin' && <Shield className="h-3 w-3" />}
           {user.role}
         </span>
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center justify-center gap-2">
-          <button
-            onClick={onEdit}
-            className="text-blue-600 hover:underline flex items-center gap-1"
-          >
-            <Edit2 className="h-3 w-3" />
-            Edit
-          </button>
-          <button
-            onClick={onDelete}
-            className="text-rose-600 hover:underline flex items-center gap-1"
-          >
-            <Trash2 className="h-3 w-3" />
-            Delete
-          </button>
+          {/* Only show edit/delete for Super Admins when viewer is Super Admin */}
+          {(!isTargetSuperAdmin || isSuperAdmin) ? (
+            <>
+              <button
+                onClick={onEdit}
+                className="text-blue-600 hover:underline flex items-center gap-1"
+              >
+                <Edit2 className="h-3 w-3" />
+                Edit
+              </button>
+              {/* Don't show delete for the primary Super Admin */}
+              {user.email.toLowerCase() !== SUPER_ADMIN_EMAIL.toLowerCase() && (
+                <button
+                  onClick={onDelete}
+                  className="text-rose-600 hover:underline flex items-center gap-1"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Delete
+                </button>
+              )}
+            </>
+          ) : (
+            <span className="text-slate-400 text-xs">Protected</span>
+          )}
         </div>
       </td>
     </Motion.tr>
   );
 }
 
-function AddUserModal({ onClose, onAdd }) {
+function AddUserModal({ onClose, onAdd, isSuperAdmin }) {
+  const toast = useToast();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -285,7 +352,12 @@ function AddUserModal({ onClose, onAdd }) {
   function handleSubmit(e) {
     e.preventDefault();
     if (!formData.name || !formData.email || !formData.password) {
-      alert('Please fill all fields');
+      toast.error('Please fill all fields');
+      return;
+    }
+    // Prevent non-Super Admins from creating Super Admin users
+    if (formData.role === 'Super Admin' && !isSuperAdmin) {
+      toast.warning('Only Super Admin can create Super Admin users');
       return;
     }
     onAdd(formData);
@@ -337,6 +409,7 @@ function AddUserModal({ onClose, onAdd }) {
               onChange={(e) => setFormData({ ...formData, role: e.target.value })}
               className="w-full rounded-xl border px-3 py-2"
             >
+              {isSuperAdmin && <option>Super Admin</option>}
               <option>Admin</option>
               <option>ECAE Manager</option>
               <option>ECAE Trainer</option>
