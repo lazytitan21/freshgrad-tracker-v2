@@ -18,6 +18,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Minus,
+  Printer,
 } from "lucide-react";
 
 // ==================== CONSTANTS ====================
@@ -1076,7 +1077,7 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 print-hide">
         <div>
           <h1 className="text-2xl font-bold">Reports & Analytics</h1>
           <p className="text-sm text-slate-500 mt-1">
@@ -1084,15 +1085,29 @@ export default function ReportsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button 
+            onClick={() => window.print()}
+            className="btn btn-secondary flex items-center gap-2"
+          >
+            <Printer className="h-4 w-4" />
+            Print Report
+          </button>
           <button className="btn btn-secondary flex items-center gap-2">
             <Calendar className="h-4 w-4" />
             Schedule Report
           </button>
         </div>
       </div>
+      
+      {/* Print Header - only visible when printing */}
+      <div className="hidden print-only print-header">
+        <h1>Talent Tracker - {REPORT_TABS.find(t => t.id === activeTab)?.label || 'Report'}</h1>
+        <p className="subtitle">Ministry of Education - Professional Development</p>
+        <p className="subtitle">Generated on {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+      </div>
 
       {/* Tabs */}
-      <div className="flex flex-wrap gap-2 border-b pb-4">
+      <div className="flex flex-wrap gap-2 border-b pb-4 print-hide">
         {REPORT_TABS.map((tab) => {
           const Icon = tab.icon;
           return (
@@ -1115,7 +1130,9 @@ export default function ReportsPage() {
 
       {/* Filters (only for Pipeline report) */}
       {activeTab === "pipeline" && (
-        <ReportFilters filters={filters} setFilters={setFilters} />
+        <div className="print-hide">
+          <ReportFilters filters={filters} setFilters={setFilters} />
+        </div>
       )}
 
       {/* Report Content */}

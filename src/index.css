@@ -703,3 +703,328 @@ button.theme-toggle:focus-visible { outline: none !important; box-shadow: none !
 
 /* Prevent overly bright borders on elements that used light borders */
 .dark .border, .dark .border-slate-200, .dark .border-gray-200 { border-color: var(--border) !important; }
+
+/* ============================================
+   PRINT STYLESHEETS
+   Optimized for printing reports and data
+   ============================================ */
+
+@media print {
+  /* Hide non-essential UI elements */
+  .no-print,
+  nav,
+  aside,
+  header,
+  footer,
+  .sidebar,
+  .topbar,
+  button:not(.print-include),
+  [role="navigation"],
+  [role="banner"],
+  [role="complementary"],
+  .notification-panel,
+  .mobile-menu,
+  .theme-toggle,
+  .print-hide {
+    display: none !important;
+  }
+  
+  /* Reset backgrounds and colors for better printing */
+  *,
+  *::before,
+  *::after {
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  
+  /* Keep colored badges and status indicators */
+  .print-color,
+  .badge,
+  .status-badge,
+  [class*="bg-emerald"],
+  [class*="bg-rose"],
+  [class*="bg-amber"],
+  [class*="bg-indigo"],
+  [class*="bg-blue"],
+  [class*="bg-green"],
+  [class*="bg-red"],
+  [class*="bg-yellow"] {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    background-color: inherit !important;
+    color: inherit !important;
+  }
+  
+  /* Page setup */
+  @page {
+    size: A4;
+    margin: 1.5cm 1cm;
+  }
+  
+  @page :first {
+    margin-top: 1cm;
+  }
+  
+  /* Body and main content */
+  body {
+    font-size: 11pt;
+    line-height: 1.5;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  
+  main,
+  .main-content,
+  .print-container {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  /* Headings */
+  h1 {
+    font-size: 18pt;
+    font-weight: 700;
+    margin-bottom: 0.5cm;
+    page-break-after: avoid;
+  }
+  
+  h2 {
+    font-size: 14pt;
+    font-weight: 600;
+    margin-top: 0.5cm;
+    margin-bottom: 0.3cm;
+    page-break-after: avoid;
+  }
+  
+  h3 {
+    font-size: 12pt;
+    font-weight: 600;
+    margin-top: 0.3cm;
+    margin-bottom: 0.2cm;
+    page-break-after: avoid;
+  }
+  
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    page-break-inside: auto;
+    font-size: 9pt;
+  }
+  
+  thead {
+    display: table-header-group;
+  }
+  
+  tfoot {
+    display: table-footer-group;
+  }
+  
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  
+  th, td {
+    border: 1px solid #ccc !important;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+  
+  th {
+    background: #f3f4f6 !important;
+    font-weight: 600;
+    color: #374151 !important;
+  }
+  
+  /* Keep table header visible on each page */
+  thead {
+    background: #f3f4f6 !important;
+  }
+  
+  /* Cards and panels for reports */
+  .panel,
+  .card,
+  .report-card,
+  .rounded-2xl,
+  .rounded-3xl {
+    border: 1px solid #e5e7eb !important;
+    padding: 0.5cm;
+    margin-bottom: 0.3cm;
+    page-break-inside: avoid;
+  }
+  
+  /* KPI cards in reports */
+  .kpi-card,
+  .stat-card {
+    border: 1px solid #d1d5db !important;
+    padding: 0.3cm;
+    text-align: center;
+    page-break-inside: avoid;
+  }
+  
+  /* Charts - show placeholder or hide */
+  .chart-container,
+  .recharts-wrapper,
+  svg.chart {
+    page-break-inside: avoid;
+    max-height: 300px;
+  }
+  
+  /* Links */
+  a {
+    color: black !important;
+    text-decoration: none !important;
+  }
+  
+  a[href]::after {
+    content: none !important;
+  }
+  
+  /* Images */
+  img {
+    max-width: 100%;
+    page-break-inside: avoid;
+  }
+  
+  /* Page breaks */
+  .page-break,
+  .print-page-break {
+    page-break-before: always;
+  }
+  
+  .page-break-after {
+    page-break-after: always;
+  }
+  
+  .no-page-break,
+  .print-no-break {
+    page-break-inside: avoid;
+  }
+  
+  /* Report header */
+  .report-header,
+  .print-header {
+    display: block !important;
+    text-align: center;
+    margin-bottom: 1cm;
+    padding-bottom: 0.5cm;
+    border-bottom: 2px solid #374151;
+  }
+  
+  .report-header h1,
+  .print-header h1 {
+    font-size: 20pt;
+    margin-bottom: 0.2cm;
+  }
+  
+  .report-header .subtitle,
+  .print-header .subtitle {
+    font-size: 10pt;
+    color: #6b7280 !important;
+  }
+  
+  /* Report footer with page numbers */
+  .report-footer,
+  .print-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 8pt;
+    color: #9ca3af !important;
+    padding: 0.3cm 0;
+    border-top: 1px solid #e5e7eb;
+  }
+  
+  /* Summary boxes */
+  .summary-box,
+  .print-summary {
+    background: #f9fafb !important;
+    border: 1px solid #d1d5db !important;
+    padding: 0.4cm;
+    margin: 0.3cm 0;
+    page-break-inside: avoid;
+  }
+  
+  /* Grid layouts - convert to single column */
+  .grid {
+    display: block !important;
+  }
+  
+  .grid > * {
+    width: 100% !important;
+    margin-bottom: 0.3cm;
+  }
+  
+  /* Two-column grid for small items */
+  .print-grid-2 {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.3cm;
+  }
+  
+  /* Specific report sections */
+  .candidates-report table {
+    font-size: 8pt;
+  }
+  
+  .courses-report table {
+    font-size: 9pt;
+  }
+  
+  /* Hide scrollbars */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Status colors for printing */
+  .status-active,
+  .status-completed,
+  .status-graduated {
+    background: #d1fae5 !important;
+    color: #065f46 !important;
+  }
+  
+  .status-pending,
+  .status-in-progress {
+    background: #fef3c7 !important;
+    color: #92400e !important;
+  }
+  
+  .status-inactive,
+  .status-rejected {
+    background: #fee2e2 !important;
+    color: #991b1b !important;
+  }
+  
+  /* Ensure text doesn't get cut off */
+  .truncate {
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: normal !important;
+  }
+  
+  /* Print-specific visibility classes */
+  .print-only {
+    display: block !important;
+  }
+  
+  .screen-only {
+    display: none !important;
+  }
+}
+
+/* Screen-only elements (hidden in print) */
+@media screen {
+  .print-only {
+    display: none !important;
+  }
+}

@@ -121,3 +121,116 @@ export function statusToMainStageIndex(status) {
   };
   return (status in map) ? map[status] : 0;
 }
+
+// ============================================
+// I04 - CONSISTENT NAMING UTILITIES
+// Standardize camelCase/snake_case across frontend/backend
+// ============================================
+
+/**
+ * Convert snake_case string to camelCase
+ * @param {string} str - snake_case string
+ * @returns {string} camelCase string
+ */
+export function snakeToCamel(str) {
+  if (!str || typeof str !== 'string') return str;
+  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+}
+
+/**
+ * Convert camelCase string to snake_case
+ * @param {string} str - camelCase string
+ * @returns {string} snake_case string
+ */
+export function camelToSnake(str) {
+  if (!str || typeof str !== 'string') return str;
+  return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+}
+
+/**
+ * Convert all keys in an object from snake_case to camelCase
+ * @param {Object} obj - Object with snake_case keys
+ * @returns {Object} Object with camelCase keys
+ */
+export function normalizeKeys(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(normalizeKeys);
+  
+  const normalized = {};
+  for (const key of Object.keys(obj)) {
+    const camelKey = snakeToCamel(key);
+    const value = obj[key];
+    // Recursively normalize nested objects (but not arrays of primitives)
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      normalized[camelKey] = normalizeKeys(value);
+    } else if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
+      normalized[camelKey] = value.map(normalizeKeys);
+    } else {
+      normalized[camelKey] = value;
+    }
+  }
+  return normalized;
+}
+
+/**
+ * Convert all keys in an object from camelCase to snake_case (for API requests)
+ * @param {Object} obj - Object with camelCase keys
+ * @returns {Object} Object with snake_case keys
+ */
+export function denormalizeKeys(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(denormalizeKeys);
+  
+  const denormalized = {};
+  for (const key of Object.keys(obj)) {
+    const snakeKey = camelToSnake(key);
+    const value = obj[key];
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      denormalized[snakeKey] = denormalizeKeys(value);
+    } else if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
+      denormalized[snakeKey] = value.map(denormalizeKeys);
+    } else {
+      denormalized[snakeKey] = value;
+    }
+  }
+  return denormalized;
+}
+
+// Common field mappings for candidate data
+export const CANDIDATE_FIELD_MAP = {
+  // Database snake_case -> Frontend camelCase
+  track_id: 'trackId',
+  national_id: 'nationalId',
+  source_batch: 'sourceBatch',
+  created_at: 'createdAt',
+  updated_at: 'updatedAt',
+  candidate_data: 'candidateData',
+  course_results: 'courseResults',
+};
+
+// Emirates list for filters
+export const EMIRATES = [
+  "Abu Dhabi",
+  "Dubai", 
+  "Sharjah",
+  "Ajman",
+  "Umm Al Quwain",
+  "Ras Al Khaimah",
+  "Fujairah"
+];
+
+// Status list for filters  
+export const STATUS_OPTIONS = [
+  "Imported",
+  "Eligible",
+  "Assigned",
+  "In Training",
+  "Courses Completed",
+  "Assessed",
+  "Graduated",
+  "Ready for Hiring",
+  "Hired/Closed",
+  "On Hold",
+  "Withdrawn",
+  "Rejected"
+];

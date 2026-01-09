@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../providers/AuthProvider";
+import { useStore } from "../providers/StoreProvider";
 import { useToast } from "../components/Toast";
 import { useConfirm } from "../components/ui/ConfirmDialog";
 import { UserPlus, Trash2, Edit2, Download, Upload, Eye, EyeOff, Shield } from "lucide-react";
@@ -8,8 +9,12 @@ import { UserPlus, Trash2, Edit2, Download, Upload, Eye, EyeOff, Shield } from "
 // Super Admin email - must match server-db.cjs
 const SUPER_ADMIN_EMAIL = 'firas.kiftaro@moe.gov.ae';
 
+// Default system roles that are always available
+const DEFAULT_ROLES = ["Super Admin", "Admin", "ECAE Manager", "ECAE Trainer", "Auditor", "Student"];
+
 export default function UsersManagementPage() {
   const { user: currentUser, users, adminUpdateUser, adminDeleteUser, adminAddUser } = useAuth();
+  const { roles: storeRoles } = useStore();
   const toast = useToast();
   const { confirmDelete, confirm } = useConfirm();
   const [editingId, setEditingId] = useState(null);
@@ -19,10 +24,33 @@ export default function UsersManagementPage() {
   // Check if current user is Super Admin
   const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL || currentUser?.role === 'Super Admin';
 
+  // Merge default roles with dynamic roles from Role Management
+  const availableRoles = useMemo(() => {
+    // Get role names from store (database)
+    const dynamicRoleNames = (storeRoles || []).map(r => r.name);
+    
+    // Start with DEFAULT_ROLES to ensure they're always available
+    // Then add any additional custom roles from the database
+    const roleSet = new Set(DEFAULT_ROLES);
+    dynamicRoleNames.forEach(name => roleSet.add(name));
+    
+    const allRoles = Array.from(roleSet);
+    
+    // Sort alphabetically, but keep Super Admin at top if present
+    const sorted = allRoles.sort((a, b) => {
+      if (a === 'Super Admin') return -1;
+      if (b === 'Super Admin') return 1;
+      return a.localeCompare(b);
+    });
+    console.log('Available roles for dropdown:', sorted, 'Store roles:', storeRoles);
+    return sorted;
+  }, [storeRoles]);
+
   // Filter only system users (not students/applicants)
   // Hide Super Admin users from non-Super Admin viewers
   const systemUsers = users.filter(u => {
-    const isSystemRole = ["Super Admin", "Admin", "ECAE Manager", "ECAE Trainer", "Auditor"].includes(u.role);
+    // Check if user role is in our available roles
+    const isSystemRole = availableRoles.includes(u.role);
     // If not a system role, exclude
     if (!isSystemRole) return false;
     // If the user being viewed is Super Admin, only show to other Super Admins
@@ -248,11 +276,12 @@ function UserRow({ user, isEditing, showPassword, onEdit, onSave, onDelete, onTo
               onChange={(e) => setEditData({ ...editData, role: e.target.value })}
               className="w-full rounded border px-2 py-1"
             >
-              {isSuperAdmin && <option>Super Admin</option>}
-              <option>Admin</option>
-              <option>ECAE Manager</option>
-              <option>ECAE Trainer</option>
-              <option>Auditor</option>
+              {availableRoles.map(role => (
+                // Super Admin option only visible to Super Admins
+                (role === 'Super Admin' && !isSuperAdmin) ? null : (
+                  <option key={role} value={role}>{role}</option>
+                )
+              ))}
             </select>
           )}
         </td>
@@ -409,11 +438,12 @@ function AddUserModal({ onClose, onAdd, isSuperAdmin }) {
               onChange={(e) => setFormData({ ...formData, role: e.target.value })}
               className="w-full rounded-xl border px-3 py-2"
             >
-              {isSuperAdmin && <option>Super Admin</option>}
-              <option>Admin</option>
-              <option>ECAE Manager</option>
-              <option>ECAE Trainer</option>
-              <option>Auditor</option>
+              {availableRoles.map(role => (
+                // Super Admin option only visible to Super Admins
+                (role === 'Super Admin' && !isSuperAdmin) ? null : (
+                  <option key={role} value={role}>{role}</option>
+                )
+              ))}
             </select>
           </div>
           <div className="flex gap-2 pt-4">

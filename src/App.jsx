@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect, useRef } from "react";
 import ReactDOM from "react-dom";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
-import { Workflow, Home, Users, BookOpen, ClipboardList, FilePlus, UploadCloud, GraduationCap, Download, UserPlus, Briefcase, User, Settings, Sun, Moon, AlertTriangle, Clock, TrendingUp, TrendingDown, Award, ChevronDown, ChevronRight, ChevronLeft, Shield, BarChart3, Menu, X } from "lucide-react";
+import { Workflow, Home, Users, BookOpen, ClipboardList, FilePlus, UploadCloud, GraduationCap, Download, UserPlus, Briefcase, User, Settings, Sun, Moon, AlertTriangle, Clock, TrendingUp, TrendingDown, Award, ChevronDown, ChevronRight, ChevronLeft, Shield, BarChart3, Menu, X, Filter, Key, Search, Trash2 } from "lucide-react";
 import { AuthProvider, useAuth } from "./providers/AuthProvider";
 import { StoreProvider, useStore } from "./providers/StoreProvider";
 import { ToastProvider, useToast } from "./components/Toast";
@@ -611,10 +611,31 @@ function AppShell({ page, setPage }) {
   // Mobile sidebar state
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
-  // Close mobile menu on page change
+  // Track if we're on mobile for portal dropdown prevention
+  const [isMobileView, setIsMobileView] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 768;
+    }
+    return false;
+  });
+  
+  // Update mobile view state on resize
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileView(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  
+  // Close mobile menu on page change (but keep desktop sections expanded)
   useEffect(() => {
     setMobileMenuOpen(false);
-  }, [page]);
+    // Only collapse sections on mobile or when sidebar is collapsed
+    if (isMobileView || sidebarCollapsed) {
+      setOpenSection(null);
+    }
+  }, [page, isMobileView, sidebarCollapsed]);
 
   // Icon mapping for sections
   const ICONS = {
@@ -751,7 +772,7 @@ function AppShell({ page, setPage }) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setMobileMenuOpen(false)}
+              onClick={() => { setMobileMenuOpen(false); setOpenSection(null); }}
               className="md:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
             />
             
@@ -767,6 +788,7 @@ function AppShell({ page, setPage }) {
               onDragEnd={(_, info) => {
                 if (info.offset.x < -100 || info.velocity.x < -500) {
                   setMobileMenuOpen(false);
+                  setOpenSection(null);
                 }
               }}
               className="md:hidden fixed top-0 left-0 bottom-0 w-72 bg-white z-50 flex flex-col shadow-2xl"
@@ -778,7 +800,7 @@ function AppShell({ page, setPage }) {
                   <span className="font-bold text-slate-800">Talent Tracker</span>
                 </div>
                 <button
-                  onClick={() => setMobileMenuOpen(false)}
+                  onClick={() => { setMobileMenuOpen(false); setOpenSection(null); }}
                   className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
                 >
                   <X className="h-5 w-5" />
@@ -931,8 +953,8 @@ function AppShell({ page, setPage }) {
                   </AnimatePresence>
                 )}
                 
-                {/* Collapsed mode: Hover popout dropdown - rendered via Portal */}
-                {sidebarCollapsed && isOpen && ReactDOM.createPortal(
+                {/* Collapsed mode: Hover popout dropdown - rendered via Portal (desktop only) */}
+                {sidebarCollapsed && isOpen && !isMobileView && ReactDOM.createPortal(
                   <Motion.div
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -1173,21 +1195,185 @@ function Stat({ label, value, hint }) {
     </div>
   );
 }
+
+// Dashboard filter constants
+const DASHBOARD_EMIRATES = ["Abu Dhabi", "Dubai", "Sharjah", "Ajman", "Umm Al Quwain", "Ras Al Khaimah", "Fujairah"];
+const DASHBOARD_STATUSES = ["Imported", "Eligible", "Assigned", "In Training", "Courses Completed", "Assessed", "Graduated", "Ready for Hiring", "Hired/Closed", "On Hold", "Withdrawn", "Rejected"];
+const DASHBOARD_TRACKS = [
+  { id: "t1", name: "STEM Core" },
+  { id: "t2", name: "Languages" },
+  { id: "t3", name: "ICT" },
+];
+
+function DashboardFilters({ filters, setFilters, onReset }) {
+  const [expanded, setExpanded] = useState(false);
+  
+  const hasActiveFilters = filters.dateFrom || filters.dateTo || filters.emirate || filters.track || filters.status;
+  
+  return (
+    <Motion.div 
+      initial={{ opacity: 0, y: -10 }} 
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-2xl border bg-white p-4 shadow-sm"
+    >
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-slate-900"
+        >
+          <Filter className="h-4 w-4" />
+          Dashboard Filters
+          {hasActiveFilters && (
+            <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs">
+              Active
+            </span>
+          )}
+          <ChevronDown className={classNames("h-4 w-4 transition-transform", expanded ? "rotate-180" : "")} />
+        </button>
+        {hasActiveFilters && (
+          <button
+            onClick={onReset}
+            className="text-xs text-slate-500 hover:text-slate-700 underline"
+          >
+            Clear all filters
+          </button>
+        )}
+      </div>
+      
+      <AnimatePresence>
+        {expanded && (
+          <Motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-4 pt-4 border-t">
+              {/* Date From */}
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">From Date</label>
+                <input
+                  type="date"
+                  value={filters.dateFrom}
+                  onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+              
+              {/* Date To */}
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">To Date</label>
+                <input
+                  type="date"
+                  value={filters.dateTo}
+                  onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+              
+              {/* Emirate */}
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Emirate</label>
+                <select
+                  value={filters.emirate}
+                  onChange={(e) => setFilters({ ...filters, emirate: e.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="">All Emirates</option>
+                  {DASHBOARD_EMIRATES.map(e => (
+                    <option key={e} value={e}>{e}</option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Track */}
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Track</label>
+                <select
+                  value={filters.track}
+                  onChange={(e) => setFilters({ ...filters, track: e.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="">All Tracks</option>
+                  {DASHBOARD_TRACKS.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* Status */}
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Status</label>
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="">All Statuses</option>
+                  {DASHBOARD_STATUSES.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </Motion.div>
+        )}
+      </AnimatePresence>
+    </Motion.div>
+  );
+}
+
 function Dashboard() {
   const { candidates, courses, corrections } = useStore();
   const { user } = useAuth();
+  
+  // D01 - Dashboard Filters state
+  const [filters, setFilters] = useState({
+    dateFrom: '',
+    dateTo: '',
+    emirate: '',
+    track: '',
+    status: '',
+  });
+  
+  const resetFilters = () => {
+    setFilters({ dateFrom: '', dateTo: '', emirate: '', track: '', status: '' });
+  };
 
   // Current date for welcome message
   const today = new Date();
   const greeting = today.getHours() < 12 ? 'Good morning' : today.getHours() < 17 ? 'Good afternoon' : 'Good evening';
   const formattedDate = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-  // ---- Aggregations
+  // Apply filters to candidates
+  const filteredCandidates = useMemo(() => {
+    return candidates.filter(c => {
+      // Date filter (based on created_at or createdAt)
+      if (filters.dateFrom) {
+        const candidateDate = c.createdAt || c.created_at;
+        if (candidateDate && new Date(candidateDate) < new Date(filters.dateFrom)) return false;
+      }
+      if (filters.dateTo) {
+        const candidateDate = c.createdAt || c.created_at;
+        if (candidateDate && new Date(candidateDate) > new Date(filters.dateTo + 'T23:59:59')) return false;
+      }
+      // Emirate filter
+      if (filters.emirate && c.emirate !== filters.emirate) return false;
+      // Track filter
+      if (filters.track && c.trackId !== filters.track && c.track_id !== filters.track) return false;
+      // Status filter  
+      if (filters.status && c.status !== filters.status) return false;
+      return true;
+    });
+  }, [candidates, filters]);
+
+  // ---- Aggregations (now using filtered candidates)
   const byStatus = {};
   const bySubject = {};
   const byEmirate = {};
   const perCourse = new Map(); // code -> Set(candidateId) to avoid double counting
-  candidates.forEach(c => {
+  filteredCandidates.forEach(c => {
     byStatus[c.status] = (byStatus[c.status] || 0) + 1;
     bySubject[c.subject] = (bySubject[c.subject] || 0) + 1;
     byEmirate[c.emirate] = (byEmirate[c.emirate] || 0) + 1;
@@ -1201,7 +1387,9 @@ function Dashboard() {
     });
   });
 
-  const totalCandidates = candidates.length;
+  // Use filtered counts for KPIs when filters are active
+  const hasActiveFilters = filters.dateFrom || filters.dateTo || filters.emirate || filters.track || filters.status;
+  const totalCandidates = hasActiveFilters ? filteredCandidates.length : candidates.length;
   const totalCourses = courses.length;
   const totalSubjects = Object.keys(bySubject).length;
   const inTraining = byStatus['In Training'] || 0;
@@ -1303,14 +1491,39 @@ function Dashboard() {
         </div>
       </Motion.div>
 
+      {/* D01 - Dashboard Filters */}
+      <DashboardFilters 
+        filters={filters} 
+        setFilters={setFilters} 
+        onReset={resetFilters}
+      />
+      
+      {/* Filter summary when active */}
+      {(filters.dateFrom || filters.dateTo || filters.emirate || filters.track || filters.status) && (
+        <Motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800"
+        >
+          <Filter className="h-4 w-4" />
+          <span>
+            Showing <strong>{filteredCandidates.length}</strong> of {candidates.length} candidates
+            {filters.emirate && <span className="ml-1">in {filters.emirate}</span>}
+            {filters.status && <span className="ml-1">with status "{filters.status}"</span>}
+            {filters.dateFrom && <span className="ml-1">from {filters.dateFrom}</span>}
+            {filters.dateTo && <span className="ml-1">to {filters.dateTo}</span>}
+          </span>
+        </Motion.div>
+      )}
+
       {/* KPI Cards - 4 per row for better proportions */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard 
-          label="Total Candidates" 
+          label={hasActiveFilters ? "Filtered Candidates" : "Total Candidates"} 
           value={totalCandidates} 
           icon={Users}
           variant="primary"
-          subtitle="All enrolled"
+          subtitle={hasActiveFilters ? `of ${candidates.length} total` : "All enrolled"}
         />
         <KpiCard 
           label="In Training" 
@@ -2686,22 +2899,44 @@ function UsersPage(){
 
   const [showAdd, setShowAdd] = useState(false);
   const [newU, setNewU] = useState({ name: "", email: "", role: "Student", password: "" });
+  const [roleFilter, setRoleFilter] = useState("ALL");
 
   // Check if current user is Super Admin
   const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL || user?.role === 'Super Admin';
 
-  // Get role options from database, filtering Super Admin for non-Super Admins
+  // Get role options from database, merging with default roles
   const roleOptions = useMemo(() => {
     const dbRoles = (roles || []).map(r => r.name);
-    // Ensure we have at least some default roles if DB is empty
+    // Always include these default roles
     const defaultRoles = ["Admin", "ECAE Manager", "ECAE Trainer", "Auditor", "Student"];
-    const allRoles = dbRoles.length > 0 ? dbRoles : defaultRoles;
-    // Filter out Super Admin for non-Super Admins
-    return isSuperAdmin ? allRoles : allRoles.filter(r => r !== 'Super Admin');
+    // Merge database roles with defaults (defaults always available)
+    const roleSet = new Set(defaultRoles);
+    dbRoles.forEach(r => roleSet.add(r));
+    // Add Super Admin only for Super Admins
+    if (isSuperAdmin) roleSet.add('Super Admin');
+    // Convert to array and sort
+    const allRoles = Array.from(roleSet).sort((a, b) => {
+      if (a === 'Super Admin') return -1;
+      if (b === 'Super Admin') return 1;
+      return a.localeCompare(b);
+    });
+    return allRoles;
   }, [roles, isSuperAdmin]);
 
+  // Role color mapping
+  const getRoleStyle = (role) => {
+    const styles = {
+      'Super Admin': 'bg-gradient-to-r from-rose-500 to-purple-600 text-white',
+      'Admin': 'bg-indigo-100 text-indigo-700',
+      'ECAE Manager': 'bg-emerald-100 text-emerald-700',
+      'ECAE Trainer': 'bg-amber-100 text-amber-700',
+      'Auditor': 'bg-sky-100 text-sky-700',
+      'Student': 'bg-violet-100 text-violet-700',
+    };
+    return styles[role] || 'bg-slate-100 text-slate-700';
+  };
+
   function createUser() {
-    // Prevent non-Super Admins from creating Super Admin users
     if (newU.role === 'Super Admin' && !isSuperAdmin) {
       toast.warning('Only Super Admin can create Super Admin users');
       return;
@@ -2719,24 +2954,35 @@ function UsersPage(){
   const [q, setQ] = useState("");
   const filtered = useMemo(()=>{
     const s = q.toLowerCase();
-    // Filter out Super Admin users if current user is not Super Admin
     return (users||[]).filter(u => {
-      // Hide Super Admin users from non-Super Admins
       if (u.role === 'Super Admin' && !isSuperAdmin) return false;
-      // Search filter
+      if (roleFilter !== "ALL" && u.role !== roleFilter) return false;
       return (u.name||"").toLowerCase().includes(s) ||
         (u.email||"").toLowerCase().includes(s) ||
         (u.role||"").toLowerCase().includes(s);
     });
-  },[q, users, isSuperAdmin]);
+  },[q, users, isSuperAdmin, roleFilter]);
+
+  // Stats by role
+  const roleStats = useMemo(() => {
+    const stats = {};
+    (users || []).forEach(u => {
+      if (u.role === 'Super Admin' && !isSuperAdmin) return;
+      stats[u.role] = (stats[u.role] || 0) + 1;
+    });
+    return stats;
+  }, [users, isSuperAdmin]);
+
+  // Total users count
+  const totalUsers = useMemo(() => {
+    return (users || []).filter(u => !(u.role === 'Super Admin' && !isSuperAdmin)).length;
+  }, [users, isSuperAdmin]);
 
   function changeRole(email, role){
-    // Prevent non-Super Admins from assigning Super Admin role
     if (role === 'Super Admin' && !isSuperAdmin) {
       toast.warning('Only Super Admin can assign Super Admin role');
       return;
     }
-    // Prevent changing the primary Super Admin's role
     if (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() && role !== 'Super Admin') {
       toast.error('The primary Super Admin role cannot be changed');
       return;
@@ -2744,6 +2990,7 @@ function UsersPage(){
     adminUpdateUser(email, { role });
     toast.success('Role updated');
   }
+
   function resetPwd(email){
     try{ 
       adminResetPassword(email); 
@@ -2751,11 +2998,11 @@ function UsersPage(){
     }
     catch(e){ toast.error(e.message||"Failed to reset"); }
   }
+
   async function del(email){
     if ((user?.email||"").toLowerCase() === String(email||"").toLowerCase()){
       toast.warning("You cannot delete the account that is currently signed in."); return;
     }
-    // Prevent deleting the primary Super Admin
     if (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
       toast.error('The primary Super Admin account cannot be deleted');
       return;
@@ -2764,6 +3011,7 @@ function UsersPage(){
     if (!confirmed) return;
     try{ adminDeleteUser(email); toast.success('User deleted'); }catch(e){ toast.error(e.message||"Failed to delete"); }
   }
+
   function exportUsers(){
     const headers = [
       { key:"name", label:"Name" },
@@ -2778,96 +3026,236 @@ function UsersPage(){
     toast.success('Users exported');
   }
 
+  // Roles to show in stat cards
+  const statRoles = ["Super Admin", "Admin", "ECAE Manager", "ECAE Trainer", "Auditor", "Student"];
+
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border bg-white p-6 shadow-sm flex items-center justify-between">
-        <div>
-          <div className="text-lg font-semibold">Platform Users</div>
-          <div className="text-sm text-slate-500">Manage roles, reset passwords, delete, and export</div>
+      {/* Header */}
+      <div className="rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
+              <Users className="h-6 w-6 text-indigo-600" />
+              Platform Users
+            </h1>
+            <p className="text-sm text-slate-500 mt-1">Manage user accounts, roles, and permissions</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={exportUsers}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border hover:bg-slate-50 transition-all text-sm"
+            >
+              <Download className="h-4 w-4" />
+              Export
+            </button>
+            <button 
+              onClick={() => setShowAdd(s => !s)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all text-sm"
+            >
+              <UserPlus className="h-4 w-4" />
+              {showAdd ? "Cancel" : "Add User"}
+            </button>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <input className="rounded-xl border px-3 py-2" placeholder="Search users…" value={q} onChange={e=>setQ(e.target.value)} />
-          <button className="rounded-xl border px-3 py-2" onClick={exportUsers}>Export XLSX</button>
-          <button className="rounded-xl bg-slate-900 text-white px-3 py-2" onClick={()=>setShowAdd(s=>!s)}>{showAdd ? "Close" : "Add user"}</button>
+
+        {/* Stats Row */}
+        <div className="mt-5 flex flex-wrap gap-2">
+          <button
+            onClick={() => setRoleFilter("ALL")}
+            className={`rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+              roleFilter === "ALL" 
+                ? "bg-indigo-600 text-white" 
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            All Users ({totalUsers})
+          </button>
+          {statRoles.filter(role => isSuperAdmin || role !== 'Super Admin').map(role => (
+            <button
+              key={role}
+              onClick={() => setRoleFilter(roleFilter === role ? "ALL" : role)}
+              className={`rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+                roleFilter === role 
+                  ? "bg-indigo-600 text-white" 
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              {role} ({roleStats[role] || 0})
+            </button>
+          ))}
         </div>
       </div>
 
-      {showAdd && (
-        <div className="rounded-2xl border bg-white p-4 shadow-sm mt-2">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <input className="rounded-xl border px-3 py-2" placeholder="Full name" value={newU.name} onChange={e=>setNewU({...newU, name:e.target.value})} />
-            <input type="email" className="rounded-xl border px-3 py-2" placeholder="Email" value={newU.email} onChange={e=>setNewU({...newU, email:e.target.value})} />
-            <select className="rounded-xl border px-3 py-2" value={newU.role} onChange={e=>setNewU({...newU, role:e.target.value})}>
-              {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
-            <input className="rounded-xl border px-3 py-2" placeholder="Password (optional)" value={newU.password} onChange={e=>setNewU({...newU, password:e.target.value})} />
-            <div className="md:col-span-4 flex justify-end">
-              <button className="rounded-xl bg-slate-900 text-white px-4 py-2" onClick={createUser}>Create user</button>
+      {/* Add User Form */}
+      <AnimatePresence>
+        {showAdd && (
+          <Motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="rounded-2xl border bg-white p-5 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-700 mb-4">Create New User</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <input 
+                  className="rounded-xl border px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 outline-none" 
+                  placeholder="Full name" 
+                  value={newU.name} 
+                  onChange={e => setNewU({...newU, name: e.target.value})} 
+                />
+                <input 
+                  type="email" 
+                  className="rounded-xl border px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 outline-none" 
+                  placeholder="Email" 
+                  value={newU.email} 
+                  onChange={e => setNewU({...newU, email: e.target.value})} 
+                />
+                <select 
+                  className="rounded-xl border px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 outline-none bg-white" 
+                  value={newU.role} 
+                  onChange={e => setNewU({...newU, role: e.target.value})}
+                >
+                  {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+                <input 
+                  className="rounded-xl border px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 outline-none" 
+                  placeholder="Password (optional)" 
+                  value={newU.password} 
+                  onChange={e => setNewU({...newU, password: e.target.value})} 
+                />
+              </div>
+              <div className="mt-3 flex items-center justify-between">
+                <p className="text-xs text-slate-400">If password is empty, a temporary one will be auto-generated.</p>
+                <button 
+                  onClick={createUser}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm hover:bg-indigo-700 transition-all"
+                >
+                  Create User
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="text-[11px] text-slate-500 mt-2">If password is empty, a temporary one will be auto-generated.</div>
+          </Motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Search */}
+      <div className="flex gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input 
+            className="w-full rounded-xl border pl-10 pr-4 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 outline-none" 
+            placeholder="Search by name, email, or role..." 
+            value={q} 
+            onChange={e => setQ(e.target.value)} 
+          />
         </div>
-      )}
+        {roleFilter !== "ALL" && (
+          <button
+            onClick={() => setRoleFilter("ALL")}
+            className="flex items-center gap-1 px-3 py-2 rounded-xl bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition-all text-sm"
+          >
+            <X className="h-4 w-4" />
+            {roleFilter}
+          </button>
+        )}
+      </div>
 
-
-      <div className="rounded-2xl border bg-white p-6 shadow-sm overflow-auto">
+      {/* Users Table */}
+      <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50">
-            <tr className="text-left">
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Email</th>
-              <th className="px-3 py-2">Role</th>
-              <th className="px-3 py-2">Actions</th>
+          <thead className="bg-slate-50 border-b">
+            <tr>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">User</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Email</th>
+              <th className="px-4 py-3 text-left font-medium text-slate-600">Role</th>
+              <th className="px-4 py-3 text-right font-medium text-slate-600">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y">
             <AnimatePresence>
               {filtered.map(u => {
                 const isTargetSuperAdmin = u.role === 'Super Admin';
                 const isPrimarySuperAdmin = u.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+                const initials = (u.name || u.email || "?").split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
                 
                 return (
-                <Motion.tr key={u.email} className="border-t" initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-6}} layout>
-                  <td className="px-3 py-2">{u.name||"—"}</td>
-                  <td className="px-3 py-2">{u.email}</td>
-                  <td className="px-3 py-2">
-                    {isPrimarySuperAdmin ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-gradient-to-r from-rose-500 to-purple-600 text-white">
-                        <Shield className="h-3 w-3" />
-                        Super Admin
-                      </span>
-                    ) : (
-                      <select 
-                        className="rounded-lg border px-2 py-1" 
-                        value={u.role||"Student"} 
-                        onChange={e=>changeRole(u.email, e.target.value)}
-                        disabled={isTargetSuperAdmin && !isSuperAdmin}
-                      >
-                        {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
-                      </select>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 space-x-2">
-                    {!isPrimarySuperAdmin && (
-                      <>
-                        <button className="rounded-lg border px-3 py-1" onClick={()=>resetPwd(u.email)}>Reset</button>
-                        <button className="rounded-lg border px-3 py-1 text-rose-700" onClick={()=>del(u.email)}>Delete</button>
-                      </>
-                    )}
-                    {isPrimarySuperAdmin && (
-                      <span className="text-xs text-slate-400">Protected</span>
-                    )}
-                  </td>
-                </Motion.tr>
-              )})}
-              {filtered.length===0 && (
-                <Motion.tr key="no-users" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
-                  <td colSpan={4} className="px-3 py-6 text-center text-slate-500">No users found.</td>
-                </Motion.tr>
-              )}
+                  <Motion.tr 
+                    key={u.email} 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="hover:bg-slate-50"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
+                          isPrimarySuperAdmin 
+                            ? 'bg-gradient-to-br from-rose-500 to-purple-600 text-white' 
+                            : 'bg-indigo-100 text-indigo-600'
+                        }`}>
+                          {initials}
+                        </div>
+                        <span className="font-medium text-slate-900">{u.name || "Unnamed"}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">{u.email}</td>
+                    <td className="px-4 py-3">
+                      {isPrimarySuperAdmin ? (
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${getRoleStyle(u.role)}`}>
+                          <Shield className="h-3 w-3" />
+                          {u.role}
+                        </span>
+                      ) : (
+                        <select 
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium cursor-pointer outline-none ${getRoleStyle(u.role)}`}
+                          value={u.role || "Student"} 
+                          onChange={e => changeRole(u.email, e.target.value)}
+                          disabled={isTargetSuperAdmin && !isSuperAdmin}
+                        >
+                          {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        {!isPrimarySuperAdmin ? (
+                          <>
+                            <button 
+                              onClick={() => resetPwd(u.email)}
+                              className="px-3 py-1.5 rounded-lg text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all"
+                            >
+                              Reset Password
+                            </button>
+                            <button 
+                              onClick={() => del(u.email)}
+                              className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 transition-all"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-xs text-slate-400 flex items-center gap-1">
+                            <Shield className="h-3 w-3" />
+                            Protected
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </Motion.tr>
+                );
+              })}
             </AnimatePresence>
           </tbody>
         </table>
+        
+        {filtered.length === 0 && (
+          <div className="p-8 text-center">
+            <Users className="h-10 w-10 text-slate-300 mx-auto mb-2" />
+            <p className="text-sm text-slate-500">No users found</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3565,9 +3953,562 @@ export default function App(){
 }
 
 
+/* ------------------------------ Inline Login Modal ------------------------------ */
+function LoginModal({ isOpen, onClose, onForgot, onSignUp }) {
+  const { login } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setErr("");
+    if (!email.trim()) { setErr("Please enter your email"); return; }
+    if (!password) { setErr("Please enter your password"); return; }
+    setLoading(true);
+    try {
+      await login(email.trim(), password);
+      onClose(); // Close modal on success
+    } catch (ex) {
+      const msg = ex.message || "Login failed";
+      if (msg.includes("not found")) setErr("No account found with this email");
+      else if (msg.includes("password") || msg.includes("Invalid")) setErr("Incorrect password");
+      else setErr(msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!isOpen) return null;
+
+  return (
+    <AnimatePresence>
+      <Motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        onClick={onClose}
+      >
+        {/* Backdrop */}
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+        
+        {/* Modal */}
+        <Motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          transition={{ type: "spring", duration: 0.3 }}
+          className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 z-10"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          {/* Header */}
+          <div className="text-center mb-6">
+            <div className="h-12 w-12 rounded-xl bg-indigo-600 flex items-center justify-center mx-auto mb-3">
+              <Workflow className="w-6 h-6 text-white" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">Welcome back</h2>
+            <p className="text-sm text-slate-500 mt-1">Sign in to your account</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="your@email.com"
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                autoComplete="email"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                autoComplete="current-password"
+              />
+            </div>
+
+            {err && (
+              <div className="flex items-center gap-2 text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                {err}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-xl bg-indigo-600 text-white py-2.5 font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Signing in...</>
+              ) : (
+                "Sign in"
+              )}
+            </button>
+          </form>
+
+          <div className="mt-4 text-center text-sm">
+            <button onClick={onForgot} className="text-indigo-600 hover:underline">Forgot password?</button>
+          </div>
+
+          <div className="mt-6 pt-4 border-t text-center text-sm text-slate-500">
+            Don't have an account?{" "}
+            <button onClick={onSignUp} className="text-indigo-600 font-medium hover:underline">Sign up</button>
+          </div>
+        </Motion.div>
+      </Motion.div>
+    </AnimatePresence>
+  );
+}
+
+/* ------------------------------ Inline Sign Up Modal ------------------------------ */
+function SignUpModal({ isOpen, onClose, onSignIn, onSuccess }) {
+  const { register, requestEmailVerification, confirmEmailVerification, login } = useAuth();
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "", code: "" });
+  const [err, setErr] = useState("");
+  const [step, setStep] = useState("form"); // "form" | "verify"
+  const [sentCode, setSentCode] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    setErr("");
+    if (!form.name.trim()) { setErr("Please enter your name"); return; }
+    if (!form.email.trim()) { setErr("Please enter your email"); return; }
+    if (!form.password) { setErr("Please enter a password"); return; }
+    if (form.password.length < 4) { setErr("Password must be at least 4 characters"); return; }
+    if (form.password !== form.confirm) { setErr("Passwords do not match"); return; }
+    
+    setLoading(true);
+    try {
+      register({ name: form.name, email: form.email, password: form.password });
+      const code = requestEmailVerification(form.email);
+      setSentCode(code);
+      setStep("verify");
+    } catch (ex) {
+      setErr(ex.message || "Registration failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleVerify(e) {
+    e.preventDefault();
+    setErr("");
+    setLoading(true);
+    try {
+      confirmEmailVerification(form.email, form.code);
+      login(form.email, form.password);
+      onSuccess?.();
+      onClose();
+    } catch (ex) {
+      setErr(ex.message || "Verification failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!isOpen) return null;
+
+  return (
+    <AnimatePresence>
+      <Motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        onClick={onClose}
+      >
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+        
+        <Motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          transition={{ type: "spring", duration: 0.3 }}
+          className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6 z-10"
+          onClick={e => e.stopPropagation()}
+        >
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          {step === "form" ? (
+            <>
+              <div className="text-center mb-6">
+                <div className="h-12 w-12 rounded-xl bg-emerald-600 flex items-center justify-center mx-auto mb-3">
+                  <UserPlus className="w-6 h-6 text-white" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-900">Create your account</h2>
+                <p className="text-sm text-slate-500 mt-1">Join as a student candidate</p>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+                    <input
+                      type="text"
+                      value={form.name}
+                      onChange={e => setForm({ ...form, name: e.target.value })}
+                      placeholder="Your full name"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={form.email}
+                      onChange={e => setForm({ ...form, email: e.target.value })}
+                      placeholder="your@email.com"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+                    <input
+                      type="password"
+                      value={form.password}
+                      onChange={e => setForm({ ...form, password: e.target.value })}
+                      placeholder="Min 4 characters"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Confirm Password</label>
+                    <input
+                      type="password"
+                      value={form.confirm}
+                      onChange={e => setForm({ ...form, confirm: e.target.value })}
+                      placeholder="Confirm password"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {err && (
+                  <div className="flex items-center gap-2 text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    {err}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full rounded-xl bg-emerald-600 text-white py-2.5 font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creating account...</>
+                  ) : (
+                    "Create Account"
+                  )}
+                </button>
+              </form>
+
+              <div className="mt-6 pt-4 border-t text-center text-sm text-slate-500">
+                Already have an account?{" "}
+                <button onClick={onSignIn} className="text-indigo-600 font-medium hover:underline">Sign in</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-center mb-6">
+                <div className="h-12 w-12 rounded-xl bg-indigo-600 flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <h2 className="text-xl font-bold text-slate-900">Verify your email</h2>
+                <p className="text-sm text-slate-500 mt-1">We sent a code to <strong>{form.email}</strong></p>
+              </div>
+
+              <form onSubmit={handleVerify} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Verification Code</label>
+                  <input
+                    type="text"
+                    value={form.code}
+                    onChange={e => setForm({ ...form, code: e.target.value })}
+                    placeholder="Enter 6-digit code"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-center text-lg tracking-widest focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div className="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2">
+                  <strong>Demo:</strong> Your verification code is <span className="font-mono bg-slate-200 px-2 py-0.5 rounded">{sentCode}</span>
+                </div>
+
+                {err && (
+                  <div className="flex items-center gap-2 text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    {err}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full rounded-xl bg-emerald-600 text-white py-2.5 font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Verifying...</>
+                  ) : (
+                    "Verify & Continue"
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStep("form")}
+                  className="w-full text-sm text-slate-500 hover:text-slate-700"
+                >
+                  ← Back to registration
+                </button>
+              </form>
+            </>
+          )}
+        </Motion.div>
+      </Motion.div>
+    </AnimatePresence>
+  );
+}
+
+/* ------------------------------ Inline Forgot Password Modal ------------------------------ */
+function ForgotPasswordModal({ isOpen, onClose, onSignIn }) {
+  const { requestPasswordReset, confirmPasswordReset } = useAuth();
+  const toast = useToast();
+  const [step, setStep] = useState("start"); // "start" | "verify"
+  const [email, setEmail] = useState("");
+  const [issuedCode, setIssuedCode] = useState("");
+  const [code, setCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  function sendCode(e) {
+    e?.preventDefault();
+    setErr("");
+    if (!email.trim()) { setErr("Please enter your email"); return; }
+    setLoading(true);
+    try {
+      const c = requestPasswordReset(email);
+      setIssuedCode(String(c));
+      setStep("verify");
+    } catch (ex) {
+      setErr(ex.message || "Could not send reset code");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function resetNow(e) {
+    e?.preventDefault();
+    setErr("");
+    if (!code) { setErr("Please enter the reset code"); return; }
+    if (!newPassword) { setErr("Please enter a new password"); return; }
+    if (newPassword !== confirmPassword) { setErr("Passwords do not match"); return; }
+    
+    setLoading(true);
+    try {
+      confirmPasswordReset(email, code, newPassword);
+      toast.success("Password updated! Please sign in with your new password.");
+      onClose();
+      onSignIn?.();
+    } catch (ex) {
+      setErr(ex.message || "Could not reset password");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!isOpen) return null;
+
+  return (
+    <AnimatePresence>
+      <Motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        onClick={onClose}
+      >
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+        
+        <Motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          transition={{ type: "spring", duration: 0.3 }}
+          className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 z-10"
+          onClick={e => e.stopPropagation()}
+        >
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          {step === "start" ? (
+            <>
+              <div className="text-center mb-6">
+                <div className="h-12 w-12 rounded-xl bg-amber-500 flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                </div>
+                <h2 className="text-xl font-bold text-slate-900">Reset your password</h2>
+                <p className="text-sm text-slate-500 mt-1">Enter your email to receive a reset code</p>
+              </div>
+
+              <form onSubmit={sendCode} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+
+                {err && (
+                  <div className="flex items-center gap-2 text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    {err}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full rounded-xl bg-amber-500 text-white py-2.5 font-medium hover:bg-amber-600 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Sending...</>
+                  ) : (
+                    "Send Reset Code"
+                  )}
+                </button>
+              </form>
+
+              <div className="mt-6 pt-4 border-t text-center text-sm text-slate-500">
+                Remember your password?{" "}
+                <button onClick={onSignIn} className="text-indigo-600 font-medium hover:underline">Sign in</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-center mb-6">
+                <div className="h-12 w-12 rounded-xl bg-emerald-600 flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                </div>
+                <h2 className="text-xl font-bold text-slate-900">Create new password</h2>
+                <p className="text-sm text-slate-500 mt-1">Enter the code sent to <strong>{email}</strong></p>
+              </div>
+
+              <form onSubmit={resetNow} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Reset Code</label>
+                  <input
+                    type="text"
+                    value={code}
+                    onChange={e => setCode(e.target.value)}
+                    placeholder="Enter 6-digit code"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-center text-lg tracking-widest focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div className="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2">
+                  <strong>Demo:</strong> Your reset code is <span className="font-mono bg-slate-200 px-2 py-0.5 rounded">{issuedCode}</span>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">New Password</label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="Enter new password"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Confirm Password</label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+
+                {err && (
+                  <div className="flex items-center gap-2 text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    {err}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full rounded-xl bg-emerald-600 text-white py-2.5 font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Resetting...</>
+                  ) : (
+                    "Reset Password"
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStep("start")}
+                  className="w-full text-sm text-slate-500 hover:text-slate-700"
+                >
+                  ← Back
+                </button>
+              </form>
+            </>
+          )}
+        </Motion.div>
+      </Motion.div>
+    </AnimatePresence>
+  );
+}
+
 /* ------------------------------ Public Landing + Auth (Student) ------------------------------ */
-function LandingPage({ onSignIn, onSignUp }){
-  const { user } = useAuth();
+function LandingPage({ onViewProfile }){
+  const { user, logout } = useAuth();
   const { publicNews, addNews } = useStore();
   const toast = useToast();
   const [title, setTitle] = useState("");
@@ -3576,6 +4517,12 @@ function LandingPage({ onSignIn, onSignUp }){
   const [manageOpen, setManageOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [updatesFilter, setUpdatesFilter] = useState('all');
+  
+  // Auth modals state
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showSignUpModal, setShowSignUpModal] = useState(false);
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   async function addUpdate(){
     const t = title.trim(), b = body.trim();
@@ -3657,11 +4604,81 @@ function LandingPage({ onSignIn, onSignUp }){
           <a href="#about" className="hover:text-slate-900 dark:hover:text-white">About</a>
           <a href="#faq" className="hover:text-slate-900 dark:hover:text-white">FAQ</a>
         </nav>
-        <div className="flex gap-2">
-          <button onClick={onSignIn} className="rounded-xl border px-4 py-2 hover:bg-white">Sign in</button>
-          <button onClick={onSignUp} className="rounded-xl bg-slate-900 text-white px-4 py-2 hover:opacity-90">Sign up</button>
-        </div>
+        
+        {/* Show different header based on login state */}
+        {user && user.role === "Student" ? (
+          <div className="relative">
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="flex items-center gap-2 rounded-xl border px-3 py-2 hover:bg-white"
+            >
+              <div className="h-8 w-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-medium">
+                {user.name?.charAt(0)?.toUpperCase() || "U"}
+              </div>
+              <span className="hidden sm:inline text-sm font-medium text-slate-700">{user.name?.split(' ')[0]}</span>
+              <ChevronDown className="h-4 w-4 text-slate-400" />
+            </button>
+            
+            {showUserMenu && (
+              <Motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border py-2 z-50"
+              >
+                <div className="px-4 py-2 border-b">
+                  <div className="font-medium text-slate-900">{user.name}</div>
+                  <div className="text-xs text-slate-500">{user.email}</div>
+                  <div className="mt-1">
+                    {user.candidateId ? (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Student - {user.candidateId}</span>
+                    ) : (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">New user</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setShowUserMenu(false); onViewProfile?.(); }}
+                  className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                >
+                  <User className="h-4 w-4" /> View My Profile
+                </button>
+                <button
+                  onClick={() => { setShowUserMenu(false); logout(); }}
+                  className="w-full px-4 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 flex items-center gap-2"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  Sign out
+                </button>
+              </Motion.div>
+            )}
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <button onClick={() => setShowLoginModal(true)} className="rounded-xl border px-4 py-2 hover:bg-white">Sign in</button>
+          </div>
+        )}
       </header>
+      
+      {/* Auth Modals */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onForgot={() => { setShowLoginModal(false); setShowForgotModal(true); }}
+        onSignUp={() => { setShowLoginModal(false); setShowSignUpModal(true); }}
+      />
+      <SignUpModal
+        isOpen={showSignUpModal}
+        onClose={() => setShowSignUpModal(false)}
+        onSignIn={() => { setShowSignUpModal(false); setShowLoginModal(true); }}
+        onSuccess={() => { setShowSignUpModal(false); }}
+      />
+      <ForgotPasswordModal
+        isOpen={showForgotModal}
+        onClose={() => setShowForgotModal(false)}
+        onSignIn={() => { setShowForgotModal(false); setShowLoginModal(true); }}
+      />
 
       {/* Hero */}
           <section className="relative overflow-hidden">
@@ -3748,11 +4765,11 @@ function LandingPage({ onSignIn, onSignUp }){
                         <div className="mt-2 text-slate-500 italic">Empowering educators through world-class training and professional development pathways.</div>
                         <p className="mt-3 text-slate-600 text-base md:text-lg max-w-lg">Build your educator profile, unlock tailored learning opportunities, and track your achievements with ease. From onboarding to advanced training, the platform connects you with the Ministry of Education’s initiatives, empowering you to grow, excel, and shape the future of education.</p>
                         <div className="mt-6 flex flex-wrap gap-3 justify-start">
-                          <button onClick={onSignUp} className="rounded-xl bg-indigo-600 text-white px-5 py-3 text-sm md:text-base shadow hover:opacity-90 inline-flex items-center gap-2">
+                          <button onClick={() => setShowSignUpModal(true)} className="rounded-xl bg-indigo-600 text-white px-5 py-3 text-sm md:text-base shadow hover:opacity-90 inline-flex items-center gap-2">
                             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20M2 12h20" /></svg>
                             Get started
                           </button>
-                          <button onClick={onSignIn} className="rounded-xl border px-5 py-3 text-sm md:text-base inline-flex items-center gap-2">
+                          <button onClick={() => setShowLoginModal(true)} className="rounded-xl border px-5 py-3 text-sm md:text-base inline-flex items-center gap-2">
                             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                             I already have an account
                           </button>
@@ -4145,7 +5162,7 @@ function ForgotPassword({ onBack, onSuccess, prefillEmail = "" }){
 
 
 
-function StudentProfile(){
+function StudentProfile({ onBack }){
   const { user, updateProfile, logout } = useAuth();
   const { candidates, courses, notify } = useStore();
   const toast = useToast();
@@ -4229,12 +5246,18 @@ function StudentProfile(){
     <div className="min-h-screen bg-slate-50">
       <div className="border-b bg-white">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="font-semibold">My Profile</div>
           <div className="flex items-center gap-3">
-            <button className="rounded-xl border px-3 py-1" onClick={logout}>
-              Sign out
-            </button>
+            {onBack && (
+              <button onClick={onBack} className="flex items-center gap-2 text-slate-600 hover:text-slate-900">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                <span className="font-medium">Back to Home</span>
+              </button>
+            )}
           </div>
+          <div className="font-semibold">My Profile</div>
+          <div className="w-[120px]"></div>
         </div>
       </div>
 
@@ -4358,11 +5381,10 @@ function StudentProfile(){
   );
 }
 function PublicPages({ page, setPage }){
-  const [resetEmail] = useState("");
-  if (page === "signin") return <SignInPublic onBack={()=>setPage("landing")} onForgot={()=>setPage("forgot")} />;
-  if (page === "signup") return <SignUpStudent onBack={()=>setPage("landing")} onSuccess={()=>setPage("signin")} />;
-  if (page === "forgot") return <ForgotPassword prefillEmail={resetEmail} onBack={()=>setPage("landing")} onSuccess={()=>setPage("signin")} />;
-  return <LandingPage onSignIn={()=>setPage("signin")} onSignUp={()=>setPage("signup")} />;
+  // All auth (login, signup, forgot) now happens via modals on the LandingPage
+  // Only need to handle landing and profile pages
+  if (page === "profile") return <StudentProfile onBack={()=>setPage("landing")} />;
+  return <LandingPage onViewProfile={()=>setPage("profile")} />;
 }
 
 
@@ -4371,8 +5393,18 @@ function PublicPages({ page, setPage }){
 function Gate({ children }){
   const { user } = useAuth();
   const [publicPage, setPublicPage] = useState("landing");
+  
+  // If not logged in, show public pages
   if (!user) return <PublicPages page={publicPage} setPage={setPublicPage} />;
-  if (user.role === "Student") return <StudentProfile />;
+  
+  // If student is logged in:
+  // - If on profile page, show StudentProfile
+  // - Otherwise stay on landing page (can browse)
+  if (user.role === "Student") {
+    return <PublicPages page={publicPage} setPage={setPublicPage} />;
+  }
+  
+  // For admin/other roles, show full app
   return children;
 }
 
