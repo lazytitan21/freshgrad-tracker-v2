@@ -23,9 +23,11 @@ export function StoreProvider({ children }) {
     courses: true,
     mentors: true,
     roles: true,
+    news: true,
     notifications: false,
     corrections: false,
-    audit: false
+    audit: false,
+    operation: false // For add/update/delete operations
   });
 
   // Simple userName for UI display (can stay in localStorage)
@@ -62,6 +64,7 @@ export function StoreProvider({ children }) {
 
   async function addCandidate(candidate) {
     try {
+      setLoading(prev => ({ ...prev, operation: true }));
       console.log('📤 Sending candidate to API:', candidate);
       console.log('📤 API URL:', API_ENDPOINTS.candidates);
       const newCandidate = await api.post(API_ENDPOINTS.candidates, candidate);
@@ -72,11 +75,14 @@ export function StoreProvider({ children }) {
     } catch (error) {
       console.error('❌ Failed to add candidate:', error);
       throw error;
+    } finally {
+      setLoading(prev => ({ ...prev, operation: false }));
     }
   }
 
   async function updateCandidate(id, patch) {
     try {
+      setLoading(prev => ({ ...prev, operation: true }));
       const updated = await api.put(API_ENDPOINTS.candidateById(id), patch);
       setCandidates(prev => prev.map(c => c.id === id ? updated : c));
       console.log('✅ Updated candidate');
@@ -84,17 +90,22 @@ export function StoreProvider({ children }) {
     } catch (error) {
       console.error('❌ Failed to update candidate:', error);
       throw error;
+    } finally {
+      setLoading(prev => ({ ...prev, operation: false }));
     }
   }
 
   async function deleteCandidate(id) {
     try {
+      setLoading(prev => ({ ...prev, operation: true }));
       await api.delete(API_ENDPOINTS.candidateById(id));
       setCandidates(prev => prev.filter(c => c.id !== id));
       console.log('✅ Deleted candidate');
     } catch (error) {
       console.error('❌ Failed to delete candidate:', error);
       throw error;
+    } finally {
+      setLoading(prev => ({ ...prev, operation: false }));
     }
   }
 
@@ -115,6 +126,7 @@ export function StoreProvider({ children }) {
 
   async function addCourse(course) {
     try {
+      setLoading(prev => ({ ...prev, operation: true }));
       console.log('📤 Sending course to API:', course);
       console.log('📤 API URL:', API_ENDPOINTS.courses);
       const newCourse = await api.post(API_ENDPOINTS.courses, course);
@@ -125,11 +137,14 @@ export function StoreProvider({ children }) {
     } catch (error) {
       console.error('❌ Failed to add course:', error);
       throw error;
+    } finally {
+      setLoading(prev => ({ ...prev, operation: false }));
     }
   }
 
   async function updateCourse(id, patch) {
     try {
+      setLoading(prev => ({ ...prev, operation: true }));
       const updated = await api.put(API_ENDPOINTS.courseById(id), patch);
       setCourses(prev => prev.map(c => c.id === id ? updated : c));
       console.log('✅ Updated course');
@@ -137,17 +152,22 @@ export function StoreProvider({ children }) {
     } catch (error) {
       console.error('❌ Failed to update course:', error);
       throw error;
+    } finally {
+      setLoading(prev => ({ ...prev, operation: false }));
     }
   }
 
   async function deleteCourse(id) {
     try {
+      setLoading(prev => ({ ...prev, operation: true }));
       await api.delete(API_ENDPOINTS.courseById(id));
       setCourses(prev => prev.filter(c => c.id !== id));
       console.log('✅ Deleted course');
     } catch (error) {
       console.error('❌ Failed to delete course:', error);
       throw error;
+    } finally {
+      setLoading(prev => ({ ...prev, operation: false }));
     }
   }
 
@@ -168,6 +188,7 @@ export function StoreProvider({ children }) {
 
   async function addMentor(mentor) {
     try {
+      setLoading(prev => ({ ...prev, operation: true }));
       const newMentor = await api.post(API_ENDPOINTS.mentors, mentor);
       setMentors(prev => [newMentor, ...prev]);
       console.log('✅ Added mentor');
@@ -175,11 +196,14 @@ export function StoreProvider({ children }) {
     } catch (error) {
       console.error('❌ Failed to add mentor:', error);
       throw error;
+    } finally {
+      setLoading(prev => ({ ...prev, operation: false }));
     }
   }
 
   async function updateMentor(id, patch) {
     try {
+      setLoading(prev => ({ ...prev, operation: true }));
       const updated = await api.put(API_ENDPOINTS.mentorById(id), patch);
       setMentors(prev => prev.map(m => m.id === id ? updated : m));
       console.log('✅ Updated mentor');
@@ -187,17 +211,22 @@ export function StoreProvider({ children }) {
     } catch (error) {
       console.error('❌ Failed to update mentor:', error);
       throw error;
+    } finally {
+      setLoading(prev => ({ ...prev, operation: false }));
     }
   }
 
   async function deleteMentor(id) {
     try {
+      setLoading(prev => ({ ...prev, operation: true }));
       await api.delete(API_ENDPOINTS.mentorById(id));
       setMentors(prev => prev.filter(m => m.id !== id));
       console.log('✅ Deleted mentor');
     } catch (error) {
       console.error('❌ Failed to delete mentor:', error);
       throw error;
+    } finally {
+      setLoading(prev => ({ ...prev, operation: false }));
     }
   }
 
@@ -218,6 +247,7 @@ export function StoreProvider({ children }) {
 
   async function addRole(role) {
     try {
+      setLoading(prev => ({ ...prev, operation: true }));
       const newRole = await api.post(API_ENDPOINTS.roles, role);
       setRoles(prev => [...prev, newRole]);
       console.log('✅ Added role');
@@ -225,11 +255,14 @@ export function StoreProvider({ children }) {
     } catch (error) {
       console.error('❌ Failed to add role:', error);
       throw error;
+    } finally {
+      setLoading(prev => ({ ...prev, operation: false }));
     }
   }
 
   async function updateRole(id, patch) {
     try {
+      setLoading(prev => ({ ...prev, operation: true }));
       const updated = await api.put(API_ENDPOINTS.roleById(id), patch);
       setRoles(prev => prev.map(r => r.id === id ? updated : r));
       console.log('✅ Updated role');
@@ -237,17 +270,22 @@ export function StoreProvider({ children }) {
     } catch (error) {
       console.error('❌ Failed to update role:', error);
       throw error;
+    } finally {
+      setLoading(prev => ({ ...prev, operation: false }));
     }
   }
 
   async function deleteRole(id) {
     try {
+      setLoading(prev => ({ ...prev, operation: true }));
       await api.delete(API_ENDPOINTS.roleById(id));
       setRoles(prev => prev.filter(r => r.id !== id));
       console.log('✅ Deleted role');
     } catch (error) {
       console.error('❌ Failed to delete role:', error);
       throw error;
+    } finally {
+      setLoading(prev => ({ ...prev, operation: false }));
     }
   }
 
@@ -327,64 +365,58 @@ export function StoreProvider({ children }) {
   // ========== NEWS/UPDATES API ==========
   async function fetchNews() {
     try {
-      const response = await fetch('/api/news');
-      if (response.ok) {
-        const data = await response.json();
-        setPublicNews(data || []);
-        console.log('✅ Loaded news from server:', data?.length || 0);
-      }
+      setLoading(prev => ({ ...prev, news: true }));
+      const data = await api.get(API_ENDPOINTS.news);
+      setPublicNews(data || []);
+      console.log('✅ Loaded news from server:', data?.length || 0);
     } catch (error) {
       console.error('❌ Failed to load news:', error);
       setPublicNews([]);
+    } finally {
+      setLoading(prev => ({ ...prev, news: false }));
     }
   }
 
   async function addNews(newsItem) {
     try {
-      const response = await fetch('/api/news', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newsItem)
-      });
-      if (response.ok) {
-        const created = await response.json();
-        setPublicNews(prev => [created, ...prev]);
-        console.log('✅ Added news');
-        return created;
-      }
+      setLoading(prev => ({ ...prev, operation: true }));
+      const created = await api.post(API_ENDPOINTS.news, newsItem);
+      setPublicNews(prev => [created, ...prev]);
+      console.log('✅ Added news');
+      return created;
     } catch (error) {
       console.error('❌ Failed to add news:', error);
       throw error;
+    } finally {
+      setLoading(prev => ({ ...prev, operation: false }));
     }
   }
 
   async function updateNews(id, patch) {
     try {
-      const response = await fetch(`/api/news/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch)
-      });
-      if (response.ok) {
-        setPublicNews(prev => prev.map(n => n.id === id ? { ...n, ...patch } : n));
-        console.log('✅ Updated news');
-      }
+      setLoading(prev => ({ ...prev, operation: true }));
+      await api.put(API_ENDPOINTS.newsById(id), patch);
+      setPublicNews(prev => prev.map(n => n.id === id ? { ...n, ...patch } : n));
+      console.log('✅ Updated news');
     } catch (error) {
       console.error('❌ Failed to update news:', error);
       throw error;
+    } finally {
+      setLoading(prev => ({ ...prev, operation: false }));
     }
   }
 
   async function deleteNews(id) {
     try {
-      const response = await fetch(`/api/news/${id}`, { method: 'DELETE' });
-      if (response.ok) {
-        setPublicNews(prev => prev.filter(n => n.id !== id));
-        console.log('✅ Deleted news');
-      }
+      setLoading(prev => ({ ...prev, operation: true }));
+      await api.delete(API_ENDPOINTS.newsById(id));
+      setPublicNews(prev => prev.filter(n => n.id !== id));
+      console.log('✅ Deleted news');
     } catch (error) {
       console.error('❌ Failed to delete news:', error);
       throw error;
+    } finally {
+      setLoading(prev => ({ ...prev, operation: false }));
     }
   }
 

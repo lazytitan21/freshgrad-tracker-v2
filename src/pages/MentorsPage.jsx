@@ -4,10 +4,11 @@ import { useStore } from '../providers/StoreProvider';
 import { useToast } from '../components/Toast';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { LoadingButton } from '../components/LoadingComponents';
+import { LoadingSpinner, LoadingOverlay } from '../components/LoadingSpinner';
 import { Plus, Search, Download, Edit2, Trash2, X, CheckCircle, Users } from 'lucide-react';
 
 export default function MentorsPage(){
-  const { mentors, addMentor, updateMentor, deleteMentor } = useStore();
+  const { mentors, addMentor, updateMentor, deleteMentor, loading } = useStore();
   const toast = useToast();
   const { confirmDelete } = useConfirm();
   const [editing, setEditing] = useState(null);
@@ -94,7 +95,10 @@ export default function MentorsPage(){
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {/* Loading overlay for operations */}
+      <LoadingOverlay show={loading.operation} message="Processing..." />
+      
       {/* Header */}
       <div className="rounded-2xl border panel bg-white p-6 shadow-sm flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
@@ -130,7 +134,12 @@ export default function MentorsPage(){
       </div>
 
       {/* Table */}
-      <div className="rounded-2xl border panel bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border panel bg-white shadow-sm overflow-hidden relative">
+        {loading.mentors && (
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10">
+            <LoadingSpinner size="lg" message="Loading mentors..." />
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="data-table">
             <thead>

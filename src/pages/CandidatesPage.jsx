@@ -5,9 +5,10 @@ import { useToast } from "../components/Toast";
 import { useConfirm } from "../components/ui/ConfirmDialog";
 import { classNames, computeFinalAverage, statusBadgeColor } from "../utils/helpers";
 import { Search, Filter, MoreHorizontal, Eye, Edit2, Trash2 } from "lucide-react";
+import { LoadingSpinner, LoadingOverlay } from "../components/LoadingSpinner";
 
 export default function CandidatesPage({ role, onOpenCandidate, onEditCandidate }){
-  const { candidates, deleteCandidate: deleteCandidateAPI, logEvent, courses } = useStore();
+  const { candidates, deleteCandidate: deleteCandidateAPI, logEvent, courses, loading } = useStore();
   const toast = useToast();
   const { confirmDelete } = useConfirm();
   const [q,setQ]=useState(""); const [statusFilter,setStatusFilter]=useState("");
@@ -32,7 +33,10 @@ export default function CandidatesPage({ role, onOpenCandidate, onEditCandidate 
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {/* Loading overlay for operations */}
+      <LoadingOverlay show={loading.operation} message="Processing..." />
+      
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
@@ -74,7 +78,12 @@ export default function CandidatesPage({ role, onOpenCandidate, onEditCandidate 
       </div>
 
       {/* Table */}
-      <div className="rounded-2xl border panel shadow-sm overflow-hidden">
+      <div className="rounded-2xl border panel shadow-sm overflow-hidden relative">
+        {loading.candidates && (
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10">
+            <LoadingSpinner size="lg" message="Loading candidates..." />
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="data-table">
             <thead>

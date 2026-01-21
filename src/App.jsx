@@ -8,6 +8,7 @@ import { StoreProvider, useStore } from "./providers/StoreProvider";
 import { ToastProvider, useToast } from "./components/Toast";
 import { ConfirmProvider, useConfirm } from "./components/ui/ConfirmDialog";
 import { SkeletonDashboard, SkeletonCandidatesPage, SkeletonTable } from "./components/ui/Skeleton";
+import { LoadingSpinner, LoadingOverlay } from "./components/LoadingSpinner";
 import MentorsPage from "./pages/MentorsPage";
 
 /* FreshGrad Training Tracker — Courses Catalog + Assignments + Corrections + Charts + Candidate PDF + Courses Exports */
@@ -1325,7 +1326,7 @@ function DashboardFilters({ filters, setFilters, onReset }) {
 }
 
 function Dashboard() {
-  const { candidates, courses, corrections } = useStore();
+  const { candidates, courses, corrections, loading } = useStore();
   const { user } = useAuth();
   
   // D01 - Dashboard Filters state
@@ -1470,7 +1471,10 @@ function Dashboard() {
   const progressPct = totalCandidates > 0 ? Math.round((graduated / totalCandidates) * 100) : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {/* Loading overlay for operations */}
+      <LoadingOverlay show={loading.operation} message="Processing..." />
+      
       {/* Welcome Header */}
       <Motion.div 
         initial={{ opacity: 0, y: -10 }} 
@@ -1779,7 +1783,7 @@ function Th({ children }){ return <th className="px-4 py-3 text-slate-600 text-x
 function Td({ children, ...rest }){ return <td className="px-4 py-3 align-top" {...rest}>{children}</td>; }
 
 function CoursesPage({ role }){
-  const { courses, setCourses, addCourse, updateCourse, deleteCourse, logEvent, notify } = useStore();
+  const { courses, setCourses, addCourse, updateCourse, deleteCourse, logEvent, notify, loading } = useStore();
   const toast = useToast();
   const { confirmDelete } = useConfirm();
   const [q,setQ]=useState("");
@@ -1912,7 +1916,10 @@ function CoursesPage({ role }){
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      {/* Loading overlay for operations */}
+      <LoadingOverlay show={loading.operation} message="Processing..." />
+      
       <div className="flex items-end justify-between gap-3">
         <div className="flex gap-2 items-end">
           <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by code, title, brief…" className="w-80 rounded-xl border px-3 py-2" />
@@ -1935,7 +1942,12 @@ function CoursesPage({ role }){
         </div>
       </div>
 
-      <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border bg-white shadow-sm overflow-hidden relative">
+        {loading.courses && (
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10">
+            <LoadingSpinner size="lg" message="Loading courses..." />
+          </div>
+        )}
         <table className="w-full text-sm">
           <thead className="bg-slate-50">
             <tr className="text-left">
@@ -2892,8 +2904,8 @@ function ExportsPage(){
 
 // ------------------------------ Platform Users ------------------------------
 function UsersPage(){
-  const { users, adminUpdateUser, adminResetPassword, adminDeleteUser, adminCreateUser, user } = useAuth();
-  const { roles } = useStore();
+  const { users, adminUpdateUser, adminResetPassword, adminDeleteUser, adminCreateUser, user, loading: authLoading } = useAuth();
+  const { roles, loading } = useStore();
   const toast = useToast();
   const { confirmDelete } = useConfirm();
 
@@ -3026,11 +3038,11 @@ function UsersPage(){
     toast.success('Users exported');
   }
 
-  // Roles to show in stat cards
-  const statRoles = ["Super Admin", "Admin", "ECAE Manager", "ECAE Trainer", "Auditor", "Student"];
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      {/* Loading overlay for operations */}
+      <LoadingOverlay show={loading.operation} message="Processing..." />
+      
       {/* Header */}
       <div className="rounded-2xl border bg-white p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -3071,7 +3083,7 @@ function UsersPage(){
           >
             All Users ({totalUsers})
           </button>
-          {statRoles.filter(role => isSuperAdmin || role !== 'Super Admin').map(role => (
+          {roleOptions.filter(role => isSuperAdmin || role !== 'Super Admin').map(role => (
             <button
               key={role}
               onClick={() => setRoleFilter(roleFilter === role ? "ALL" : role)}
@@ -3209,12 +3221,13 @@ function UsersPage(){
                         </span>
                       ) : (
                         <select 
-                          className={`rounded-full px-2.5 py-1 text-xs font-medium cursor-pointer outline-none ${getRoleStyle(u.role)}`}
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium cursor-pointer outline-none border ${getRoleStyle(u.role)}`}
+                          style={{ appearance: 'auto' }}
                           value={u.role || "Student"} 
                           onChange={e => changeRole(u.email, e.target.value)}
                           disabled={isTargetSuperAdmin && !isSuperAdmin}
                         >
-                          {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
+                          {roleOptions.map(r => <option key={r} value={r} style={{ background: 'white', color: 'black' }}>{r}</option>)}
                         </select>
                       )}
                     </td>
@@ -3583,13 +3596,16 @@ function RoleManagementPage() {
   if (loading?.roles) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin h-8 w-8 border-4 border-indigo-500 border-t-transparent rounded-full" />
+        <LoadingSpinner size="lg" message="Loading roles..." />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {/* Loading overlay for operations */}
+      <LoadingOverlay show={loading.operation || saving} message={saving ? "Saving..." : "Processing..."} />
+      
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -5392,7 +5408,15 @@ function PublicPages({ page, setPage }){
 /* Gate shows Login until authenticated */
 function Gate({ children }){
   const { user } = useAuth();
+  const { loading } = useStore();
   const [publicPage, setPublicPage] = useState("landing");
+  
+  // Show loading screen on initial data fetch
+  const isInitialLoading = loading.candidates || loading.courses || loading.mentors || loading.roles;
+  
+  if (user && isInitialLoading) {
+    return <LoadingSpinner fullScreen message="Loading application data..." />;
+  }
   
   // If not logged in, show public pages
   if (!user) return <PublicPages page={publicPage} setPage={setPublicPage} />;
@@ -5599,11 +5623,34 @@ function ApplicantsPage(){
 /* ========================= Course Enrollment (Manual + Bulk) — FINAL ========================= */
 function CourseEnrollmentPage(){
   const { user } = useAuth();
-  const canManage = ["Admin","ECAE Manager","ECAE Trainer"].includes(user?.role);
+  const { roles, loading } = useStore();
+  
+  // Check if current user is Super Admin
+  const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL || user?.role === 'Super Admin';
+  
+  // Get permissions from database roles or fallback
+  const roleData = roles.find(r => r.name === user?.role);
+  const FALLBACK_PERMISSIONS = {
+    "Super Admin": ["dashboard","candidates","courses","import","results","graduation","applicants","exports","reports","settings","users","hiring","enrollment","mentors","roles"],
+    Admin: ["dashboard","candidates","courses","import","results","graduation","applicants","exports","reports","settings","users","hiring","enrollment","mentors","roles"],
+    "ECAE Manager": ["dashboard","candidates","courses","results","graduation","applicants","reports","hiring","enrollment","mentors"],
+    "ECAE Trainer": ["candidates","courses","results","enrollment"],
+    Auditor: ["dashboard","candidates","reports"],
+  };
+  
+  const allowed = isSuperAdmin 
+    ? ["dashboard","candidates","courses","import","results","graduation","applicants","exports","reports","settings","users","hiring","enrollment","mentors","roles"]
+    : (roleData?.permissions || FALLBACK_PERMISSIONS[user?.role] || []);
+  
+  const canManage = allowed.includes("enrollment");
   const [tab, setTab] = React.useState("manual");
+  
   if(!canManage) return <div className="p-6">You do not have access to Course Enrollment.</div>;
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-4">
+    <div className="max-w-6xl mx-auto p-6 space-y-4 relative">
+      {/* Loading overlay for operations */}
+      <LoadingOverlay show={loading.operation} message="Processing..." />
+      
       <div className="flex items-center justify-between">
         <div className="text-2xl font-semibold">Course Enrollment</div>
         <div className="text-sm text-slate-500">Assign candidates manually or via CSV (enroll-only)</div>
@@ -5633,6 +5680,8 @@ function ManualEnrollCard(){
   const [cohort, setCohort] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
+  const [editingId, setEditingId] = React.useState(null);
+  const [editData, setEditData] = React.useState({});
 
   const list = useMemo(()=> Array.isArray(candidates) ? candidates : [], [candidates]);
   const courseList = useMemo(()=> Array.isArray(courses) ? courses : [], [courses]);
@@ -5705,6 +5754,42 @@ function ManualEnrollCard(){
     }
   }
 
+  function startEdit(enrollment){
+    setEditingId(enrollment.id);
+    setEditData({
+      cohort: enrollment.cohort || "",
+      status: enrollment.status || "Enrolled",
+      startDate: enrollment.startDate || "",
+      endDate: enrollment.endDate || ""
+    });
+  }
+
+  function cancelEdit(){
+    setEditingId(null);
+    setEditData({});
+  }
+
+  function saveEdit(enrollmentId){
+    if (!selectedId || !enrollmentId) return;
+    const next = list.map(c => ({...c, enrollments: (c.enrollments||[]).map(e=>({ ...e }))}));
+    const idx = next.findIndex(c => String(c.id)===String(selectedId));
+    if (idx === -1) { toast.error("Candidate not found."); return; }
+    const cand = next[idx];
+    const enrollment = cand.enrollments.find(e => e.id === enrollmentId);
+    if (!enrollment) { toast.error("Enrollment not found."); return; }
+    
+    enrollment.cohort = editData.cohort || "";
+    enrollment.status = editData.status || "Enrolled";
+    enrollment.startDate = editData.startDate || "";
+    enrollment.endDate = editData.endDate || "";
+    
+    setCandidates(next);
+    notify?.("Enrollment", `Updated enrollment for ${cand.name||cand.email} in ${enrollment.code}`);
+    toast.success("Enrollment updated");
+    setEditingId(null);
+    setEditData({});
+  }
+
   return (
     <div className="rounded-2xl border bg-white p-6 shadow-sm space-y-4">
       <div className="grid md:grid-cols-2 gap-4">
@@ -5766,7 +5851,7 @@ function ManualEnrollCard(){
                   <th className="text-left p-2">Status</th>
                   <th className="text-left p-2">Start</th>
                   <th className="text-left p-2">End</th>
-                  <th className="text-left p-2"></th>
+                  <th className="text-left p-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -5774,12 +5859,92 @@ function ManualEnrollCard(){
                   <tr key={e.id} className="border-t">
                     <td className="p-2">{e.code}</td>
                     <td className="p-2">{e.title}</td>
-                    <td className="p-2">{e.cohort}</td>
-                    <td className="p-2">{e.status}</td>
-                    <td className="p-2">{e.startDate}</td>
-                    <td className="p-2">{e.endDate}</td>
+                    <td className="p-2">
+                      {editingId === e.id ? (
+                        <input 
+                          type="text"
+                          value={editData.cohort}
+                          onChange={(ev)=>setEditData({...editData, cohort: ev.target.value})}
+                          className="w-full rounded border px-2 py-1"
+                          placeholder="e.g., AY24-25-A"
+                        />
+                      ) : (
+                        e.cohort || "—"
+                      )}
+                    </td>
+                    <td className="p-2">
+                      {editingId === e.id ? (
+                        <select 
+                          value={editData.status}
+                          onChange={(ev)=>setEditData({...editData, status: ev.target.value})}
+                          className="w-full rounded border px-2 py-1"
+                        >
+                          <option value="Enrolled">Enrolled</option>
+                          <option value="In Progress">In Progress</option>
+                          <option value="Completed">Completed</option>
+                          <option value="Dropped">Dropped</option>
+                          <option value="Failed">Failed</option>
+                        </select>
+                      ) : (
+                        e.status || "—"
+                      )}
+                    </td>
+                    <td className="p-2">
+                      {editingId === e.id ? (
+                        <input 
+                          type="date"
+                          value={editData.startDate}
+                          onChange={(ev)=>setEditData({...editData, startDate: ev.target.value})}
+                          className="w-full rounded border px-2 py-1"
+                        />
+                      ) : (
+                        e.startDate || "—"
+                      )}
+                    </td>
+                    <td className="p-2">
+                      {editingId === e.id ? (
+                        <input 
+                          type="date"
+                          value={editData.endDate}
+                          onChange={(ev)=>setEditData({...editData, endDate: ev.target.value})}
+                          className="w-full rounded border px-2 py-1"
+                        />
+                      ) : (
+                        e.endDate || "—"
+                      )}
+                    </td>
                     <td className="p-2 text-right">
-                      <button onClick={()=>removeEnrollment(e.code)} className="text-red-600 hover:underline">Remove</button>
+                      {editingId === e.id ? (
+                        <div className="flex gap-2 justify-end">
+                          <button 
+                            onClick={()=>saveEdit(e.id)} 
+                            className="text-green-600 hover:underline text-xs"
+                          >
+                            Save
+                          </button>
+                          <button 
+                            onClick={cancelEdit} 
+                            className="text-slate-600 hover:underline text-xs"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 justify-end">
+                          <button 
+                            onClick={()=>startEdit(e)} 
+                            className="text-blue-600 hover:underline text-xs"
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            onClick={()=>removeEnrollment(e.code)} 
+                            className="text-red-600 hover:underline text-xs"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}

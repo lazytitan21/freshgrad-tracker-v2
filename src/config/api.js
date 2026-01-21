@@ -44,6 +44,10 @@ export const API_ENDPOINTS = {
   // Roles
   roles: `${API_BASE_URL}/roles`,
   roleById: (id) => `${API_BASE_URL}/roles/${id}`,
+  
+  // News/Updates
+  news: `${API_BASE_URL}/news`,
+  newsById: (id) => `${API_BASE_URL}/news/${id}`,
 };
 
 /**
