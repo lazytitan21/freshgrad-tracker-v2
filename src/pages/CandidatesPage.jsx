@@ -3,7 +3,7 @@ import { motion as Motion, AnimatePresence } from "framer-motion";
 import { useStore } from "../providers/StoreProvider";
 import { useToast } from "../components/Toast";
 import { useConfirm } from "../components/ui/ConfirmDialog";
-import { classNames, computeFinalAverage, statusBadgeColor } from "../utils/helpers";
+import { classNames, computeCurrentAverage, statusBadgeColor } from "../utils/helpers";
 import { Search, Filter, MoreHorizontal, Eye, Edit2, Trash2 } from "lucide-react";
 import { LoadingSpinner, LoadingOverlay } from "../components/LoadingSpinner";
 
@@ -102,7 +102,7 @@ export default function CandidatesPage({ role, onOpenCandidate, onEditCandidate 
             <tbody>
               <AnimatePresence>
                 {rows.map((c, idx) => {
-                  const finalAvg = computeFinalAverage(c, courses);
+                  const currentAvg = computeCurrentAverage(c, courses);
                   return (
                     <Motion.tr 
                       key={c.id} 
@@ -130,9 +130,9 @@ export default function CandidatesPage({ role, onOpenCandidate, onEditCandidate 
                       <td className="text-center">
                         <span className={classNames(
                           "font-semibold",
-                          finalAvg !== null && finalAvg >= 70 ? "text-emerald-600" : "text-slate-500"
+                          currentAvg !== null && currentAvg >= 70 ? "text-emerald-600" : "text-slate-500"
                         )}>
-                          {finalAvg ?? "—"}
+                          {currentAvg ?? "—"}
                         </span>
                       </td>
                       <td>{c.sponsor || "—"}</td>
@@ -187,3 +187,4 @@ export default function CandidatesPage({ role, onOpenCandidate, onEditCandidate 
     </div>
   );
 }
+
